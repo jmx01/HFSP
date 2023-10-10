@@ -14,20 +14,22 @@ dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
 x = [8, 16]  # 零件数
 alpha = 1.2  # 六号工位二号机的加工时间系数
 num = np.arange(x[0])  # 生成初始数据
-population_random_num = 10  # 随机子个体数
-population_elite_num = 2  # 精英子个体数
+population_random_num = 64  # 随机子个体数
+population_elite_num = x[0]  # 精英子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 
 
-# 这里要加精英解函数
-def add_random_element(pop_num):
+def add_element(pop_num):
     """
-    向种群添加不重复子个体
-    pop_num:随机子个体数
-    return:不重复子个体二维数组
+    向种群添加可重复精英解和不重复随机子个体
+    pop_num:总个体数
+    return:种群
     """
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
-    while len(part) - population_elite_num < pop_num:  # 当小于子个体数时
+    # 添加精英解
+
+    # 添加随机解
+    while len(part) < pop_num:  # 当小于子个体数时
         random.shuffle(num)
         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
             part = np.r_[part, [copy.deepcopy(num)]]
@@ -62,6 +64,15 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10)) -> list:
 
 
 def buffer_now(delay: list, index: list, dp, dc, choose):
+    """
+    计算进入buffer时的状态
+    :param delay:出工序5时的延迟
+    :param index:出工序5的顺序
+    :param dp:操作时间
+    :param dc:换模时间
+    :param choose:选择1号机还是2号机
+    :return:进入buffer的顺序，延迟时间，1-buffer的顺序
+    """
     first, second = [], []
     delay_time1, delay_time2 = [], []
 
@@ -100,17 +111,13 @@ def buffer_now(delay: list, index: list, dp, dc, choose):
     delay_arg = np.argsort(delay_time)
     index_sort = index_buffer[delay_arg]
     delay_sort = np.sort(delay_time)
-    print("在第一台机器操作的是工件：")
-    print(first)
-    print("在第二台机器操作的是工件：")
-    print(second)
-    return index_sort, delay_sort, first, second
+
+    index_1t6 = [index, first, second]
+    return index_sort, delay_sort, index_1t6
 
 
 def five_to_six(delay: list, index: list, dp, dc):
-    print("首选1号机")
     choose1 = buffer_now(delay, index, dp, dc, 1)  # 首次选择1号机
-    print("首选2号机")
     choose2 = buffer_now(delay, index, dp, dc, 2)  # 首次选择2号机
     return choose1, choose2
 
@@ -121,34 +128,43 @@ def cross_index(index):
     return arg, index_new
 
 
-def process_new(index, delay, dp, dc):
+def process_new(index, delay, index_16, dp, dc):
     """
-    7-10的工序的时间
+    在7处的邻域搜索
     :param index:从buffer出来的顺序
     :param delay:从buffer出来的延迟时间
+    :param index_16: 1-6的编码
     :param dp:操作时间
     :param dc:换模时间
     :return:
     """
-    delay_origin = process(index, delay, dp, dc)  # first in first out
-    print(delay_origin)
+    # first in first out
+    index_origin = copy.deepcopy(index_16)
+    index_origin.append(index)
+    index_origin.append(1000 / process(index, delay, dp, dc)[-1])  # 添加适应度，越大越好
+    print(index_origin)
+    print("适应度：%f" % index_origin[-1])
 
+    # 交换一些顺序
     arg1, index1 = cross_index(index)
     delay1 = process(index1, delay[arg1], dp, dc)  # 前五个操作台结束时时间
-    print(index1)
-    print(delay1)
     return delay1[-1]
 
 
+# 种群
+population = add_element(population_num)  # 生成种群
+
+# 某个体前五个操作台的时间
 delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
-population = add_random_element(population_random_num)  # 生成种群
 delay_five = process(population[0], delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
-print(population[0])
-print(delay_five)
+
+# 某个体在5-6时分化为两个个体
 pop_six1, pop_six2 = five_to_six(delay_five, population[0], dp1, dc1)
-index_six, delay_six, index_first, index_second = pop_six1[0], pop_six1[1], pop_six1[2], pop_six1[3]
-process_new(index_six, delay_six, dp1, dc1)
-print(index_first,index_second)
-index_six, delay_six, index_first, index_second = pop_six2[0], pop_six2[1], pop_six2[2], pop_six2[3]
-process_new(index_six, delay_six, dp1, dc1)
-print(index_first,index_second)
+
+# 计算先走机器1时的适应度
+index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
+process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+
+# index_six, delay_six, index_first, index_second = pop_six2[0], pop_six2[1], pop_six2[2], pop_six2[3]
+# process_new(index_six, delay_six, dp1, dc1)
+# print(index_first, index_second)
