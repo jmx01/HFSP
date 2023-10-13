@@ -1,8 +1,12 @@
 import copy
 import random
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/'
@@ -17,6 +21,8 @@ num = np.arange(x[0])  # 生成初始数据
 population_random_num = 64  # 随机子个体数
 population_elite_num = x[0]  # 精英子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
+inhibit_table = []  # 用来存储已经计算过的子个体
+fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 
 
 def add_element(pop_num):
@@ -36,7 +42,7 @@ def add_element(pop_num):
     return part
 
 
-def process(now_list, delay_time, dp, dc, arr=range(6, 10)) -> list:
+def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
     """
     通过现在的加工序列，每个加工序列的延迟时间，生成对应操作台后的延迟时间
     :param now_list:加工序列
@@ -44,6 +50,7 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10)) -> list:
     :param dp:操作时间
     :param dc:换模时间
     :param arr:操作的工作台序号
+    :param complete:判断是否完整显示
     :return:经过此部分操作后的延迟时间
     """
     end_time = []  # 每个操作台的结束时间
@@ -60,7 +67,10 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10)) -> list:
                 epoch.append(start_time + dp.iat[j, now_list[i]])  # 此工作台的延迟时间为起始操作时间+操作时间
         end_time.append(epoch)  # 每个工件在每个操作台的结束时间
 
-    return [era[-1] for era in end_time]
+    if not complete:
+        return [era[-1] for era in end_time]
+    else:
+        return [era[-1] for era in end_time], end_time
 
 
 def buffer_now(delay: list, index: list, dp, dc, choose):
@@ -131,19 +141,22 @@ def cross_index(index):
 def process_new(index, delay, index_16, dp, dc):
     """
     在7处的邻域搜索
-    :param index:从buffer出来的顺序
-    :param delay:从buffer出来的延迟时间
+    :param index:从buffer进入7的顺序
+    :param delay:从buffer进入7的延迟时间
     :param index_16: 1-6的编码
     :param dp:操作时间
     :param dc:换模时间
-    :return:
+    :return:此子个体较优的解
     """
     # first in first out
     index_origin = copy.deepcopy(index_16)
     index_origin.append(index)
-    index_origin.append(1000 / process(index, delay, dp, dc)[-1])  # 添加适应度，越大越好
-    print(index_origin)
-    print("适应度：%f" % index_origin[-1])
+    if index_origin not in inhibit_table:  # 当不在禁忌表中时
+        inhibit_table.append(index_origin)  # 不再计算适应度
+        fitness = 1e5 / process(index, delay, dp, dc)[-1]
+        index_origin.append(fitness)  # 添加适应度，越大越好
+        fitness_inhibit_table.append(fitness)
+        print(index_origin)
 
     # 交换一些顺序
     arg1, index1 = cross_index(index)
@@ -151,20 +164,60 @@ def process_new(index, delay, index_16, dp, dc):
     return delay1[-1]
 
 
+def six_decode(now_list, delay_time, dp, dc, choose):
+    delay_sort = []
+    if choose == 1:
+        for k in range(len(now_list)):
+            if k == 0:
+                delay_sort.append(delay_time[0] + dp.iat[5, now_list[0]])
+            else:
+                delay_sort.append(delay_time[k] + dp.iat[5, now_list[k]] + dc.iat[now_list[k - 1], now_list[k]])
+    else:
+        for k in range(len(now_list)):
+            if k == 0:
+                delay_sort.append(delay_time[0] + dp.iat[5, now_list[0]] * alpha)
+            else:
+                delay_sort.append(delay_time[k] + dp.iat[5, now_list[k]] * alpha + dc.iat[now_list[k - 1], now_list[k]])
+    return delay_sort
+
+
+def decode(p):
+    """
+    解码子个体
+    :param p:某个子个体，格式为【1-5编码，6-1编码，6-2编码，7-10编码，适应度】
+    :return:返回一张甘特图
+    """
+    delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)
+    print(delay_15)
+
+    index_new = np.where(np.in1d(p[0], p[1]))[0]
+    delay_61 = six_decode(p[1], np.array(delay_15)[index_new], dp1, dc1, 1)
+    print(delay_61)
+
+    index_new = np.where(np.in1d(p[0], p[2]))[0]
+    delay_62 = six_decode(p[2], np.array(delay_15)[index_new], dp1, dc1, 2)
+    print(delay_62)
+
+    delay_710, end_time_710 = process(p[3], delay_initial, dp1, dc1, range(5), complete=True)
+
+
 # 种群
 population = add_element(population_num)  # 生成种群
 
-# 某个体前五个操作台的时间
-delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
-delay_five = process(population[0], delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
+for pop in population:
+    # 某个体前五个操作台的时间
+    delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
+    delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
 
-# 某个体在5-6时分化为两个个体
-pop_six1, pop_six2 = five_to_six(delay_five, population[0], dp1, dc1)
+    # 某个体在5-6时分化为两个个体
+    pop_six1, pop_six2 = five_to_six(delay_five, pop, dp1, dc1)
 
-# 计算先走机器1时的适应度
-index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
-process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+    # 计算先走机器1时的适应度
+    index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
+    process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
 
-# index_six, delay_six, index_first, index_second = pop_six2[0], pop_six2[1], pop_six2[2], pop_six2[3]
-# process_new(index_six, delay_six, dp1, dc1)
-# print(index_first, index_second)
+    # 计算先走机器2时的适应度
+    index_six, delay_six, index_one_to_six = pop_six2[0], pop_six2[1], pop_six2[2]
+    process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+
+decode(inhibit_table[0])
