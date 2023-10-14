@@ -221,22 +221,21 @@ dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
 dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
 x = [8, 16]  # 零件数
-alpha = 1.2  # 六号工位二号机的加工时间系数
 num = np.arange(x[0])  # 生成初始数据
-population_random_num = 64  # 随机子个体数
-population_elite_num = x[0]  # 精英子个体数
-population_num = population_elite_num + population_random_num  # 种群总个体数
-
-# 种群
-population = add_element(population_num)  # 生成种群
-least_time = 2000000  # 最小时间
-best_path = []  # 最佳加工路线
 delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
+population_elite_num = x[0]  # 精英子个体数
 
+population_random_num = 64  # 随机子个体数
+population_num = population_elite_num + population_random_num  # 种群总个体数
+alpha = 1.2  # 六号工位二号机的加工时间系数
+least_time = 2000000  # 最小时间
+
+best_path = []  # 最佳加工路线
 inhibit_table = []  # 用来存储已经计算过的子个体
 fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 
 for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
+    population = add_element(population_num)  # 生成种群
     for pop in population:
         # 某个体前五个操作台的时间
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
