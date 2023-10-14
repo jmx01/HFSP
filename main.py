@@ -156,12 +156,25 @@ def process_new(index, delay, index_16, dp, dc):
         fitness = 1e5 / process(index, delay, dp, dc)[-1]
         index_origin.append(fitness)  # 添加适应度，越大越好
         fitness_inhibit_table.append(fitness)
-        print(index_origin)
+        # print(index_origin)
 
     # 交换一些顺序
     arg1, index1 = cross_index(index)
     delay1 = process(index1, delay[arg1], dp, dc)  # 前五个操作台结束时时间
     return delay1[-1]
+
+
+def get_element_index(old_array: np.array, new_array: np.array) -> np.array:
+    """
+    用来寻找新数组在旧数组的索引
+    :param old_array:旧数组
+    :param new_array:新数组
+    :return:索引数组
+    """
+    index_new = []
+    for era in new_array:
+        index_new.append(np.where(old_array == era)[0][0])
+    return np.array(index_new)
 
 
 def six_decode(now_list, delay_time, dp, dc, choose):
@@ -187,18 +200,29 @@ def decode(p):
     :param p:某个子个体，格式为【1-5编码，6-1编码，6-2编码，7-10编码，适应度】
     :return:返回一张甘特图
     """
+    # 1-5 延迟时间
     delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)
-    print(delay_15)
 
-    index_new = np.where(np.in1d(p[0], p[1]))[0]
+    # 6-1 延迟时间
+    index_new = get_element_index(p[0], p[1])
     delay_61 = six_decode(p[1], np.array(delay_15)[index_new], dp1, dc1, 1)
-    print(delay_61)
 
-    index_new = np.where(np.in1d(p[0], p[2]))[0]
+    # 6-2 延迟时间
+    index_new = get_element_index(p[0], p[2])
     delay_62 = six_decode(p[2], np.array(delay_15)[index_new], dp1, dc1, 2)
-    print(delay_62)
 
-    delay_710, end_time_710 = process(p[3], delay_initial, dp1, dc1, range(5), complete=True)
+    # 进入buffer的顺序和时间
+    delay_61, delay_62 = np.array(delay_61), np.array(delay_62)
+    p6 = np.hstack((p[1], p[2]))
+    delay_time = np.hstack((delay_61, delay_62))
+    delay_arg = np.argsort(delay_time)
+    index_buffer = p6[delay_arg]
+    delay_buffer = np.sort(delay_time)
+    delay_buffer = delay_buffer[get_element_index(p[3], index_buffer)]
+
+    # 7-10 延迟时间
+    delay_710, end_time_710 = process(p[3], delay_buffer, dp1, dc1, complete=True)
+    print(delay_710)
 
 
 # 种群
@@ -220,4 +244,5 @@ for pop in population:
     index_six, delay_six, index_one_to_six = pop_six2[0], pop_six2[1], pop_six2[2]
     process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
 
-decode(inhibit_table[0])
+decode(inhibit_table[0])  # 后面记得移出去
+print(1e5 / fitness_inhibit_table[0])
