@@ -4,25 +4,10 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-
-# 零件号,机器号均减了1，记得最后要加1
-path = 'D:/desk/industry_synthesis/'
-dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
-dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
-# dp2 = pd.read_csv(path+'case2_process.csv')  # case2_process
-# dc2 = pd.read_csv(path+'case2_time.csv')  # case2_change
-
-x = [8, 16]  # 零件数
-alpha = 1.2  # 六号工位二号机的加工时间系数
-num = np.arange(x[0])  # 生成初始数据
-population_random_num = 64  # 随机子个体数
-population_elite_num = x[0]  # 精英子个体数
-population_num = population_elite_num + population_random_num  # 种群总个体数
-inhibit_table = []  # 用来存储已经计算过的子个体
-fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 
 
 def add_element(pop_num):
@@ -105,12 +90,12 @@ def buffer_now(delay: list, index: list, dp, dc, choose):
             if delay_time1[-1] <= delay_time2[-1]:
                 first.append(index[deed])
                 delay_time1.append(
-                    max(delay[deed], delay_time1[-1]) + dc.iat[index[deed - 1], index[deed]] + dp.iat[
+                    max(delay[deed], delay_time1[-1]) + dc.iat[first[-2], first[-1]] + dp.iat[
                         5, index[deed]])
             else:
                 second.append(index[deed])
                 delay_time2.append(
-                    max(delay[deed], delay_time2[-1]) + dc.iat[index[deed - 1], index[deed]] + dp.iat[
+                    max(delay[deed], delay_time2[-1]) + dc.iat[second[-2], second[-1]] + dp.iat[
                         5, index[deed]] * alpha)
         deed += 1
 
@@ -128,7 +113,8 @@ def buffer_now(delay: list, index: list, dp, dc, choose):
 
 def five_to_six(delay: list, index: list, dp, dc):
     choose1 = buffer_now(delay, index, dp, dc, 1)  # 首次选择1号机
-    choose2 = buffer_now(delay, index, dp, dc, 2)  # 首次选择2号机
+    # choose2 = buffer_now(delay, index, dp, dc, 2)  # 首次选择2号机
+    choose2 = []
     return choose1, choose2
 
 
@@ -140,7 +126,7 @@ def cross_index(index):
 
 def process_new(index, delay, index_16, dp, dc):
     """
-    在7处的邻域搜索
+    在7处的邻域搜索,求解
     :param index:从buffer进入7的顺序
     :param delay:从buffer进入7的延迟时间
     :param index_16: 1-6的编码
@@ -184,13 +170,15 @@ def six_decode(now_list, delay_time, dp, dc, choose):
             if k == 0:
                 delay_sort.append(delay_time[0] + dp.iat[5, now_list[0]])
             else:
-                delay_sort.append(delay_time[k] + dp.iat[5, now_list[k]] + dc.iat[now_list[k - 1], now_list[k]])
+                delay_sort.append(
+                    max(delay_time[k], delay_sort[-1]) + dp.iat[5, now_list[k]] + dc.iat[now_list[k - 1], now_list[k]])
     else:
         for k in range(len(now_list)):
             if k == 0:
                 delay_sort.append(delay_time[0] + dp.iat[5, now_list[0]] * alpha)
             else:
-                delay_sort.append(delay_time[k] + dp.iat[5, now_list[k]] * alpha + dc.iat[now_list[k - 1], now_list[k]])
+                delay_sort.append(max(delay_time[k], delay_sort[-1]) + dp.iat[5, now_list[k]] * alpha + dc.iat[
+                    now_list[k - 1], now_list[k]])
     return delay_sort
 
 
@@ -198,7 +186,7 @@ def decode(p):
     """
     解码子个体
     :param p:某个子个体，格式为【1-5编码，6-1编码，6-2编码，7-10编码，适应度】
-    :return:返回一张甘特图
+    :return:返回供甘特图使用的数据
     """
     # 1-5 延迟时间
     delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)
@@ -225,24 +213,57 @@ def decode(p):
     print(delay_710)
 
 
+# 零件号,机器号均减了1，记得最后要加1
+path = 'D:/desk/industry_synthesis/'
+# dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
+# dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
+dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
+dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
+
+x = [8, 16]  # 零件数
+alpha = 1.2  # 六号工位二号机的加工时间系数
+num = np.arange(x[0])  # 生成初始数据
+population_random_num = 64  # 随机子个体数
+population_elite_num = x[0]  # 精英子个体数
+population_num = population_elite_num + population_random_num  # 种群总个体数
+
 # 种群
 population = add_element(population_num)  # 生成种群
+least_time = 2000000  # 最小时间
+best_path = []  # 最佳加工路线
+delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
 
-for pop in population:
-    # 某个体前五个操作台的时间
-    delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
-    delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
+inhibit_table = []  # 用来存储已经计算过的子个体
+fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 
-    # 某个体在5-6时分化为两个个体
-    pop_six1, pop_six2 = five_to_six(delay_five, pop, dp1, dc1)
+for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
+    for pop in population:
+        # 某个体前五个操作台的时间
+        delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
 
-    # 计算先走机器1时的适应度
-    index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
-    process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+        # 某个体在5-6时分化为两个个体
+        pop_six1, pop_six2 = five_to_six(delay_five, pop, dp1, dc1)
 
-    # 计算先走机器2时的适应度
-    index_six, delay_six, index_one_to_six = pop_six2[0], pop_six2[1], pop_six2[2]
-    process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+        # 计算先走机器1时的适应度
+        index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
+        process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
 
-decode(inhibit_table[0])  # 后面记得移出去
-print(1e5 / fitness_inhibit_table[0])
+        # # 计算先走机器2时的适应度
+        # index_six, delay_six, index_one_to_six = pop_six2[0], pop_six2[1], pop_six2[2]
+        # process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+
+    # decode(inhibit_table[0])  # 后面记得移出去
+    # print(1e5 / fitness_inhibit_table[0])
+    # 种群迭代
+    if least_time > 1e5 / max(fitness_inhibit_table):
+        index_best = np.argmax(fitness_inhibit_table)
+        least_time = 1e5 / max(fitness_inhibit_table)
+        best_path = inhibit_table[index_best]
+    else:
+        continue
+
+print(best_path[0])
+print(best_path[1])
+print(best_path[2])
+print(best_path[3])
+print(least_time)
