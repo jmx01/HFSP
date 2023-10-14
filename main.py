@@ -220,15 +220,17 @@ path = 'D:/desk/industry_synthesis/'
 dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
 dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
-x = [8, 16]  # 零件数
-num = np.arange(x[0])  # 生成初始数据
-delay_initial = [0] * x[0]  # 初始延迟时间，为工件数序列
-population_elite_num = x[0]  # 精英子个体数
+num = np.arange(dp1.shape[1])  # 生成初始数据
+delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
+population_elite_num = dp1.shape[1]  # 精英子个体数
 
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 alpha = 1.2  # 六号工位二号机的加工时间系数
 least_time = 2000000  # 最小时间
+
+must_time = 0  # 最大时间
+wrongest_path = []  # 最不好时间
 
 best_path = []  # 最佳加工路线
 inhibit_table = []  # 用来存储已经计算过的子个体
@@ -258,11 +260,21 @@ for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
         index_best = np.argmax(fitness_inhibit_table)
         least_time = 1e5 / max(fitness_inhibit_table)
         best_path = inhibit_table[index_best]
-    else:
-        continue
+    if must_time < 1e5 / min(fitness_inhibit_table):
+        index_worst = np.argmin(fitness_inhibit_table)
+        must_time = 1e5/min(fitness_inhibit_table)
+        wrongest_path = inhibit_table[index_worst]
 
+print("best:")
 print(best_path[0])
 print(best_path[1])
 print(best_path[2])
 print(best_path[3])
 print(least_time)
+
+print("worst:")
+print(wrongest_path[0])
+print(wrongest_path[1])
+print(wrongest_path[2])
+print(wrongest_path[3])
+print(must_time)
