@@ -164,6 +164,15 @@ def get_element_index(old_array: np.array, new_array: np.array) -> np.array:
 
 
 def six_decode(now_list, delay_time, dp, dc, choose):
+    """
+    在六处的解码
+    :param now_list:输入数组6-1或者6-2
+    :param delay_time:输入对应延迟时间
+    :param dp:操作时间
+    :param dc:换模时间
+    :param choose:选择机器1还是机器2
+    :return:解码离开6时的延迟时间
+    """
     delay_sort = []
     if choose == 1:
         for k in range(len(now_list)):
@@ -215,10 +224,10 @@ def decode(p):
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/'
-# dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
-# dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
-dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
-dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
+dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
+dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
+# dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
+# dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
 num = np.arange(dp1.shape[1])  # 生成初始数据
 delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
@@ -230,7 +239,7 @@ alpha = 1.2  # 六号工位二号机的加工时间系数
 least_time = 2000000  # 最小时间
 
 must_time = 0  # 最大时间
-wrongest_path = []  # 最不好时间
+wrongest_path = []  # 最差加工路线
 
 best_path = []  # 最佳加工路线
 inhibit_table = []  # 用来存储已经计算过的子个体
