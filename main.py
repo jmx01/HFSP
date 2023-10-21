@@ -215,7 +215,7 @@ def decode(p):
     delay_arg = np.argsort(delay_time)
     index_buffer = p6[delay_arg]
     delay_buffer = np.sort(delay_time)
-    delay_buffer = delay_buffer[get_element_index(p[3], index_buffer)]
+    delay_buffer = delay_buffer[get_element_index(index_buffer, p[3])]
 
     # 7-10 延迟时间
     delay_710, end_time_710 = process(p[3], delay_buffer, dp1, dc1, complete=True)
@@ -244,6 +244,10 @@ wrongest_path = []  # 最差加工路线
 best_path = []  # 最佳加工路线
 inhibit_table = []  # 用来存储已经计算过的子个体
 fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
+decode([np.array([5, 1, 6, 0, 4, 7, 3, 2]), np.array([5, 0, 4, 3, 2]), np.array([1, 6, 7]),
+        np.array([5, 6, 0, 1, 7, 4, 3, 2])])
+# decode([np.array([5, 1, 7, 4, 6, 0, 3, 2]), np.array([5, 7, 6, 3]), np.array([1,4,0,2]),
+#         np.array([5, 1, 7, 4, 6, 0, 3, 2])])
 
 for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
     population = add_element(population_num)  # 生成种群
@@ -271,7 +275,7 @@ for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
         best_path = inhibit_table[index_best]
     if must_time < 1e5 / min(fitness_inhibit_table):
         index_worst = np.argmin(fitness_inhibit_table)
-        must_time = 1e5/min(fitness_inhibit_table)
+        must_time = 1e5 / min(fitness_inhibit_table)
         wrongest_path = inhibit_table[index_worst]
 
 print("best:")
