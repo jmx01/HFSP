@@ -1,4 +1,5 @@
 import copy
+import operator
 import random
 
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ def Hungarian_Algorithm():
     for i in range(cost.shape[0]):
         cost[i][i] = 10000
     row_ind, col_ind = linear_sum_assignment(cost)
-    circle_list = []
+    use_circle = []
     used_element = [0] * len(row_ind)
     while 0 in used_element:
         element = used_element.index(0)  # 可用的元素值
@@ -27,8 +28,8 @@ def Hungarian_Algorithm():
             now.append(col_ind[ind])
             used_element[col_ind[ind]] = 1
             ind = np.where(row_ind == now[-1])[0][0]
-        circle_list.append(now)
-    return circle_list
+        use_circle.append(now)
+    return use_circle
 
 
 def add_element(pop_num):
@@ -52,16 +53,7 @@ def add_element(pop_num):
         random.shuffle(num)
         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
             part = np.r_[part, [copy.deepcopy(num)]]
-    return circle_list, part
-
-
-# def add_random_element(pop_num, part):
-#     # 添加随机解
-#     while len(part) < pop_num:  # 当小于子个体数时，添加随机解
-#         random.shuffle(num)
-#         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
-#             part = np.r_[part, [copy.deepcopy(num)]]
-#     return part
+    return part
 
 
 def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
@@ -148,11 +140,23 @@ def cross_index(index):
     return arg, index_new
 
 
-def update_inhibit(index, delay):
-    if index not in inhibit_table:  # 当不在禁忌表中时
-        inhibit_table.append(index)  # 不再计算适应度
-        fitness = 1e5 / process(index, delay, dp1, dc1)[-1]
-        fitness_inhibit_table.append(fitness)
+def update_inhibit_dict(index_all, delay, dp, dc):
+    """
+    更新禁忌表
+    :param index_all:新的顺序
+    :param delay: 进入7时的延迟时间
+    :param dp: 操作时间
+    :param dc: 换模时间
+    :return: 空
+    """
+    ind = index_all[-1]
+    name = [*index_all[0]]
+    for k in range(len(index_all) - 1):
+        name.append(-1)
+        name.extend(index_all[k + 1])
+    name = tuple(name)
+    if name not in inhibit_dict.keys():
+        inhibit_dict[name] = 1e5 / process(ind, delay, dp, dc)[-1]
 
 
 def process_new(index, delay, index_16, dp, dc):
@@ -168,19 +172,13 @@ def process_new(index, delay, index_16, dp, dc):
     # first in first out
     index_origin = copy.deepcopy(index_16)
     index_origin.append(index)
-    if index_origin not in inhibit_table:  # 当不在禁忌表中时
-        inhibit_table.append(index_origin)  # 不再计算适应度
-        fitness = 1e5 / process(index, delay, dp, dc)[-1]
-        index_origin.append(fitness)  # 添加适应度，越大越好
-        fitness_inhibit_table.append(fitness)
-        # print(index_origin)
-
+    update_inhibit_dict(index_origin, delay, dp, dc)
     # 交换一些顺序
     arg1, index1 = cross_index(index)
     delay1 = process(index1, delay[arg1], dp, dc)  # 前五个操作台结束时时间
 
 
-def get_element_index(old_array: np.array, new_array: np.array) -> np.array:
+def get_element_index(old_array, new_array):
     """
     用来寻找新数组在旧数组的索引
     :param old_array:旧数组
@@ -227,16 +225,9 @@ def decode(p):
     :param p:某个子个体，格式为【1-5编码，6-1编码，6-2编码，7-10编码，适应度】
     :return:返回供甘特图使用的数据
     """
-    # 1-5 延迟时间
-    delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)
-
-    # 6-1 延迟时间
-    index_new = get_element_index(p[0], p[1])
-    delay_61 = six_decode(p[1], np.array(delay_15)[index_new], dp1, dc1, 1)
-
-    # 6-2 延迟时间
-    index_new = get_element_index(p[0], p[2])
-    delay_62 = six_decode(p[2], np.array(delay_15)[index_new], dp1, dc1, 2)
+    delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)  # 1-5 延迟时间
+    delay_61 = six_decode(p[1], np.array(delay_15)[get_element_index(p[0], p[1])], dp1, dc1, 1)  # 6-1 延迟时间
+    delay_62 = six_decode(p[2], np.array(delay_15)[get_element_index(p[0], p[2])], dp1, dc1, 2)  # 6-2 延迟时间
 
     # 进入buffer的顺序和时间
     delay_61, delay_62 = np.array(delay_61), np.array(delay_62)
@@ -259,10 +250,11 @@ dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
 # dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
 # dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
-num = np.arange(dp1.shape[1])  # 生成初始数据
+component_num = dp1.shape[1]  # 工件数
+num = np.arange(component_num)  # 生成初始数据
 circle_list = Hungarian_Algorithm()  # 最优循环
-delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
-population_elite_num = dp1.shape[1]  # 精英子个体数
+delay_initial = [0] * component_num  # 初始延迟时间，为工件数序列
+population_elite_num = component_num  # 精英子个体数
 
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
@@ -270,22 +262,28 @@ alpha = 1.2  # 六号工位二号机的加工时间系数
 
 best_time = []
 best_time_path = []
+inhibit_dict = {}  # 空禁忌表
 
-inhibit_table = []  # 用来存储已经计算过的子个体
-fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
-for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
-    circle, population = add_element(population_num)  # 生成最优循环、精英解和随机解
+for kk in tqdm(range(1), ncols=80, position=0, leave=True):
+    population = add_element(population_num)  # 生成最优循环、精英解和随机解
     for pop in population:
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
         pop_six = buffer_now(delay_five, pop, dp1, dc1)  # 某个体在5-6时分化为两个个体
         process_new(pop_six[0], pop_six[1], pop_six[2], dp1, dc1)  # 添加与计算
-
-    # decode(inhibit_table[0])  # 后面记得移出去
-    # print(1e5 / fitness_inhibit_table[0])
     # 种群迭代
-index_best = np.argmax(fitness_inhibit_table)
-best_time = 1e5 / fitness_inhibit_table[index_best]
-best_time_path = inhibit_table[index_best]
+inhibit_dict = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
 
+best_time = 1e5 / inhibit_dict[0][1]
+
+best_time_path = np.array(inhibit_dict[0][0])
+indices = np.where(best_time_path == -1)[0]
+best_path = [best_time_path[:component_num],  # 1-5
+             best_time_path[component_num + 1:indices[1]],  # 6-1
+             best_time_path[indices[1] + 1:-component_num - 1],  # 6-2
+             best_time_path[-component_num:]]  # 7-10
+
+inhibit_dict = dict(inhibit_dict)
 print(best_time)
-print(best_time_path)
+print(best_path)
+
+decode(best_path)
