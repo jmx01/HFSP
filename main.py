@@ -40,6 +40,14 @@ def add_element(pop_num):
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
     circle_list = Hungarian_Algorithm()  # 最优循环
+    while len(part) <= population_elite_num:
+        out_layer = np.arange(len(circle_list))
+        random.shuffle(out_layer)
+        for k in range(len(circle_list)):
+            start = random.randint(0, len(circle_list[k]) - 1)
+            circle_list[k] = circle_list[k][start:] + circle_list[k][:start]
+        new = np.concatenate(circle_list)
+        part = np.r_[part, [new]]
 
     # 添加随机解
     while len(part) < pop_num:  # 当小于子个体数时
@@ -246,10 +254,10 @@ def decode(p):
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/'
-# dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
-# dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
-dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
-dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
+dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
+dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
+# dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
+# dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
 num = np.arange(dp1.shape[1])  # 生成初始数据
 delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
@@ -262,9 +270,9 @@ alpha = 1.2  # 六号工位二号机的加工时间系数
 best_time = []
 best_time_path = []
 
+inhibit_table = []  # 用来存储已经计算过的子个体
+fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
-    inhibit_table = []  # 用来存储已经计算过的子个体
-    fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
     circle, population = add_element(population_num)  # 生成最优循环和种群
     for pop in population:
         # 某个体前五个操作台的时间
@@ -284,10 +292,9 @@ for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
     # decode(inhibit_table[0])  # 后面记得移出去
     # print(1e5 / fitness_inhibit_table[0])
     # 种群迭代
-    index_best = np.argmax(fitness_inhibit_table)
-    best_time.append(1e5 / fitness_inhibit_table[index_best])
-    best_time_path.append(inhibit_table[index_best])
+index_best = np.argmax(fitness_inhibit_table)
+best_time = 1e5 / fitness_inhibit_table[index_best]
+best_time_path = inhibit_table[index_best]
 
-print(np.mean(best_time))
-print(np.var(best_time))
-print(best_time_path[np.argmax(best_time)])
+print(best_time)
+print(best_time_path)
