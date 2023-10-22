@@ -33,28 +33,35 @@ def Hungarian_Algorithm():
 
 def add_element(pop_num):
     """
-    向种群添加可重复精英解和不重复随机子个体
+    向种群添加可重复精英解
     pop_num:总个体数
     return:种群
     """
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
-    circle_list = Hungarian_Algorithm()  # 最优循环
-    while len(part) <= population_elite_num:
+    while len(part) <= population_elite_num:  # 添加精英解
         out_layer = np.arange(len(circle_list))
         random.shuffle(out_layer)
         for k in range(len(circle_list)):
             start = random.randint(0, len(circle_list[k]) - 1)
             circle_list[k] = circle_list[k][start:] + circle_list[k][:start]
-        new = np.concatenate(circle_list)
-        part = np.r_[part, [new]]
+        part = np.r_[part, [np.concatenate(circle_list)]]
 
     # 添加随机解
-    while len(part) < pop_num:  # 当小于子个体数时
+    while len(part) < pop_num:  # 当小于子个体数时，添加随机解
         random.shuffle(num)
         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
             part = np.r_[part, [copy.deepcopy(num)]]
     return circle_list, part
+
+
+# def add_random_element(pop_num, part):
+#     # 添加随机解
+#     while len(part) < pop_num:  # 当小于子个体数时，添加随机解
+#         random.shuffle(num)
+#         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
+#             part = np.r_[part, [copy.deepcopy(num)]]
+#     return part
 
 
 def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
@@ -88,26 +95,20 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> l
         return [era[-1] for era in end_time], end_time
 
 
-def buffer_now(delay: list, index: list, dp, dc, choose):
+def buffer_now(delay: list, index: list, dp, dc):
     """
     计算进入buffer时的状态
     :param delay:出工序5时的延迟
     :param index:出工序5的顺序
     :param dp:操作时间
     :param dc:换模时间
-    :param choose:选择1号机还是2号机
     :return:进入buffer的顺序，延迟时间，1-buffer的顺序
     """
     first, second = [], []
     delay_time1, delay_time2 = [], []
 
-    if choose == 1:  # 先走1号机
-        first.append(index[0])
-        delay_time1.append(delay[0] + dp.iat[5, index[0]])
-    else:  # 先走2号机
-        second.append(index[0])
-        delay_time2.append(delay[0] + dp.iat[5, index[0]] * alpha)
-
+    first.append(index[0])
+    delay_time1.append(delay[0] + dp.iat[5, index[0]])
     deed = 1  # 已加工个数
     while deed < len(index):  # 当还有工件未完成时
         if not first:  # 当first为空时
@@ -140,12 +141,6 @@ def buffer_now(delay: list, index: list, dp, dc, choose):
     index_1t6 = [index, first, second]
     return index_sort, delay_sort, index_1t6
 
-
-def five_to_six(delay: list, index: list, dp, dc):
-    choose1 = buffer_now(delay, index, dp, dc, 1)  # 首次选择1号机
-    # choose2 = buffer_now(delay, index, dp, dc, 2)  # 首次选择2号机
-    choose2 = []
-    return choose1, choose2
 
 
 def cross_index(index):
@@ -260,6 +255,7 @@ dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
 # dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
 num = np.arange(dp1.shape[1])  # 生成初始数据
+circle_list = Hungarian_Algorithm()  # 最优循环
 delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
 population_elite_num = dp1.shape[1]  # 精英子个体数
 
@@ -273,21 +269,13 @@ best_time_path = []
 inhibit_table = []  # 用来存储已经计算过的子个体
 fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
 for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
-    circle, population = add_element(population_num)  # 生成最优循环和种群
+    circle, population = add_element(population_num)  # 生成最优循环、精英解和随机解
     for pop in population:
-        # 某个体前五个操作台的时间
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
+        pop_six1 = buffer_now(delay_five, pop, dp1, dc1)  # 某个体在5-6时分化为两个个体
 
-        # 某个体在5-6时分化为两个个体
-        pop_six1, pop_six2 = five_to_six(delay_five, pop, dp1, dc1)
-
-        # 计算先走机器1时的适应度
         index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
         process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
-
-        # # 计算先走机器2时的适应度
-        # index_six, delay_six, index_one_to_six = pop_six2[0], pop_six2[1], pop_six2[2]
-        # process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
 
     # decode(inhibit_table[0])  # 后面记得移出去
     # print(1e5 / fitness_inhibit_table[0])
