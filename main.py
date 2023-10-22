@@ -4,10 +4,31 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
 from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+
+
+def Hungarian_Algorithm():
+    cost = dc1.values
+    for i in range(cost.shape[0]):
+        cost[i][i] = 10000
+    row_ind, col_ind = linear_sum_assignment(cost)
+    circle_list = []
+    used_element = [0] * len(row_ind)
+    while 0 in used_element:
+        element = used_element.index(0)  # 可用的元素值
+        used_element[element] = 1
+        now = [element]
+        ind = np.where(row_ind == now[-1])[0][0]
+        while col_ind[ind] not in now:
+            now.append(col_ind[ind])
+            used_element[col_ind[ind]] = 1
+            ind = np.where(row_ind == now[-1])[0][0]
+        circle_list.append(now)
+    return circle_list
 
 
 def add_element(pop_num):
@@ -18,13 +39,14 @@ def add_element(pop_num):
     """
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
+    circle_list = Hungarian_Algorithm()  # 最优循环
 
     # 添加随机解
     while len(part) < pop_num:  # 当小于子个体数时
         random.shuffle(num)
         if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
             part = np.r_[part, [copy.deepcopy(num)]]
-    return part
+    return circle_list, part
 
 
 def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
@@ -224,10 +246,10 @@ def decode(p):
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/'
-dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
-dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
-# dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
-# dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
+# dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
+# dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
+dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
+dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
 
 num = np.arange(dp1.shape[1])  # 生成初始数据
 delay_initial = [0] * dp1.shape[1]  # 初始延迟时间，为工件数序列
@@ -236,21 +258,14 @@ population_elite_num = dp1.shape[1]  # 精英子个体数
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 alpha = 1.2  # 六号工位二号机的加工时间系数
-least_time = 2000000  # 最小时间
 
-must_time = 0  # 最大时间
-wrongest_path = []  # 最差加工路线
-
-best_path = []  # 最佳加工路线
-inhibit_table = []  # 用来存储已经计算过的子个体
-fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
-decode([np.array([5, 1, 6, 0, 4, 7, 3, 2]), np.array([5, 0, 4, 3, 2]), np.array([1, 6, 7]),
-        np.array([5, 6, 0, 1, 7, 4, 3, 2])])
-# decode([np.array([5, 1, 7, 4, 6, 0, 3, 2]), np.array([5, 7, 6, 3]), np.array([1,4,0,2]),
-#         np.array([5, 1, 7, 4, 6, 0, 3, 2])])
+best_time = []
+best_time_path = []
 
 for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
-    population = add_element(population_num)  # 生成种群
+    inhibit_table = []  # 用来存储已经计算过的子个体
+    fitness_inhibit_table = []  # 用来存对应禁忌表的适应度
+    circle, population = add_element(population_num)  # 生成最优循环和种群
     for pop in population:
         # 某个体前五个操作台的时间
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
@@ -269,25 +284,10 @@ for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
     # decode(inhibit_table[0])  # 后面记得移出去
     # print(1e5 / fitness_inhibit_table[0])
     # 种群迭代
-    if least_time > 1e5 / max(fitness_inhibit_table):
-        index_best = np.argmax(fitness_inhibit_table)
-        least_time = 1e5 / max(fitness_inhibit_table)
-        best_path = inhibit_table[index_best]
-    if must_time < 1e5 / min(fitness_inhibit_table):
-        index_worst = np.argmin(fitness_inhibit_table)
-        must_time = 1e5 / min(fitness_inhibit_table)
-        wrongest_path = inhibit_table[index_worst]
+    index_best = np.argmax(fitness_inhibit_table)
+    best_time.append(1e5 / fitness_inhibit_table[index_best])
+    best_time_path.append(inhibit_table[index_best])
 
-print("best:")
-print(best_path[0])
-print(best_path[1])
-print(best_path[2])
-print(best_path[3])
-print(least_time)
-
-print("worst:")
-print(wrongest_path[0])
-print(wrongest_path[1])
-print(wrongest_path[2])
-print(wrongest_path[3])
-print(must_time)
+print(np.mean(best_time))
+print(np.var(best_time))
+print(best_time_path[np.argmax(best_time)])
