@@ -87,6 +87,16 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> l
         return [era[-1] for era in end_time], end_time
 
 
+def six_merge(delay1, delay2, index1, index2):
+    delay1, delay2 = np.array(delay1), np.array(delay2)
+    index_buffer = np.hstack((index1, index2))
+    delay_time = np.hstack((delay1, delay2))
+    delay_arg = np.argsort(delay_time)
+    index_sort = index_buffer[delay_arg]
+    delay_sort = np.sort(delay_time)
+    return index_sort, delay_sort
+
+
 def buffer_now(delay: list, index: list, dp, dc):
     """
     计算进入buffer时的状态
@@ -123,13 +133,7 @@ def buffer_now(delay: list, index: list, dp, dc):
         deed += 1
 
     first, second = np.array(first), np.array(second)
-    delay_time1, delay_time2 = np.array(delay_time1), np.array(delay_time2)
-    index_buffer = np.hstack((first, second))
-    delay_time = np.hstack((delay_time1, delay_time2))
-    delay_arg = np.argsort(delay_time)
-    index_sort = index_buffer[delay_arg]
-    delay_sort = np.sort(delay_time)
-
+    index_sort, delay_sort = six_merge(delay_time1, delay_time2, first, second)
     index_1t6 = [index, first, second]
     return index_sort, delay_sort, index_1t6
 
@@ -219,6 +223,16 @@ def six_decode(now_list, delay_time, dp, dc, choose):
     return delay_sort
 
 
+def undo(p):
+    p = np.array(p)
+    indices = np.where(p == -1)[0]
+    p = [p[:component_num],  # 1-5
+         p[component_num + 1:indices[1]],  # 6-1
+         p[indices[1] + 1:-component_num - 1],  # 6-2
+         p[-component_num:]]  # 7-10
+    return p
+
+
 def decode(p):
     """
     解码子个体
@@ -230,12 +244,7 @@ def decode(p):
     delay_62 = six_decode(p[2], np.array(delay_15)[get_element_index(p[0], p[2])], dp1, dc1, 2)  # 6-2 延迟时间
 
     # 进入buffer的顺序和时间
-    delay_61, delay_62 = np.array(delay_61), np.array(delay_62)
-    p6 = np.hstack((p[1], p[2]))
-    delay_time = np.hstack((delay_61, delay_62))
-    delay_arg = np.argsort(delay_time)
-    index_buffer = p6[delay_arg]
-    delay_buffer = np.sort(delay_time)
+    index_buffer, delay_buffer = six_merge(delay_61, delay_62, p[1], p[2])
     delay_buffer = delay_buffer[get_element_index(index_buffer, p[3])]
 
     # 7-10 延迟时间
@@ -256,6 +265,8 @@ circle_list = Hungarian_Algorithm()  # 最优循环
 delay_initial = [0] * component_num  # 初始延迟时间，为工件数序列
 population_elite_num = component_num  # 精英子个体数
 
+out_circle = 1
+inside_circle = 50
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 alpha = 1.2  # 六号工位二号机的加工时间系数
@@ -264,7 +275,7 @@ best_time = []
 best_time_path = []
 inhibit_dict = {}  # 空禁忌表
 
-for kk in tqdm(range(1), ncols=80, position=0, leave=True):
+for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
     population = add_element(population_num)  # 生成最优循环、精英解和随机解
     for pop in population:
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
@@ -274,16 +285,9 @@ for kk in tqdm(range(1), ncols=80, position=0, leave=True):
 inhibit_dict = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
 
 best_time = 1e5 / inhibit_dict[0][1]
-
-best_time_path = np.array(inhibit_dict[0][0])
-indices = np.where(best_time_path == -1)[0]
-best_path = [best_time_path[:component_num],  # 1-5
-             best_time_path[component_num + 1:indices[1]],  # 6-1
-             best_time_path[indices[1] + 1:-component_num - 1],  # 6-2
-             best_time_path[-component_num:]]  # 7-10
+best_path = undo(inhibit_dict[0][0])
+decode(best_path)
 
 inhibit_dict = dict(inhibit_dict)
 print(best_time)
 print(best_path)
-
-decode(best_path)
