@@ -142,11 +142,17 @@ def buffer_now(delay: list, index: list, dp, dc):
     return index_sort, delay_sort, index_1t6
 
 
-
 def cross_index(index):
     index_new = copy.deepcopy(index)
     arg = range(len(index_new))
     return arg, index_new
+
+
+def update_inhibit(index, delay):
+    if index not in inhibit_table:  # 当不在禁忌表中时
+        inhibit_table.append(index)  # 不再计算适应度
+        fitness = 1e5 / process(index, delay, dp1, dc1)[-1]
+        fitness_inhibit_table.append(fitness)
 
 
 def process_new(index, delay, index_16, dp, dc):
@@ -172,7 +178,6 @@ def process_new(index, delay, index_16, dp, dc):
     # 交换一些顺序
     arg1, index1 = cross_index(index)
     delay1 = process(index1, delay[arg1], dp, dc)  # 前五个操作台结束时时间
-    return delay1[-1]
 
 
 def get_element_index(old_array: np.array, new_array: np.array) -> np.array:
@@ -272,10 +277,8 @@ for kk in tqdm(range(1000), ncols=80, position=0, leave=True):
     circle, population = add_element(population_num)  # 生成最优循环、精英解和随机解
     for pop in population:
         delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
-        pop_six1 = buffer_now(delay_five, pop, dp1, dc1)  # 某个体在5-6时分化为两个个体
-
-        index_six, delay_six, index_one_to_six = pop_six1[0], pop_six1[1], pop_six1[2]
-        process_new(index_six, delay_six, index_one_to_six, dp1, dc1)
+        pop_six = buffer_now(delay_five, pop, dp1, dc1)  # 某个体在5-6时分化为两个个体
+        process_new(pop_six[0], pop_six[1], pop_six[2], dp1, dc1)  # 添加与计算
 
     # decode(inhibit_table[0])  # 后面记得移出去
     # print(1e5 / fitness_inhibit_table[0])
