@@ -12,6 +12,10 @@ plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 
 def Hungarian_Algorithm():
+    """
+    匈牙利算法，求解最优循环
+    :return:最优循环列表
+    """
     cost = dc1.values
     for i in range(cost.shape[0]):
         cost[i][i] = 10000
@@ -32,6 +36,12 @@ def Hungarian_Algorithm():
 
 
 def check_unique(p, part):
+    """
+    判断是否已经在种群中
+    :param p: 子个体第一段
+    :param part: 种群
+    :return: 新种群
+    """
     if np.any(np.all(p != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
         part = np.r_[part, [np.concatenate(circle_list)]]
         fitness(np.concatenate(circle_list))
@@ -40,14 +50,14 @@ def check_unique(p, part):
 
 def add_initial_element(pop_num):
     """
-    向种群添加可重复精英解
+    向种群添加不重复的精英解和随机解
     pop_num:总个体数
     return:空
     """
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
+    out_layer = np.arange(len(circle_list))
     while len(part) <= population_elite_num:
-        out_layer = np.arange(len(circle_list))
         random.shuffle(out_layer)
         for k in range(len(circle_list)):
             start = random.randint(0, len(circle_list[k]) - 1)
@@ -61,10 +71,13 @@ def add_initial_element(pop_num):
 
 
 def fitness(p):
+    """
+    计算适应度
+    :param p: 子个体，被解码的
+    """
     delay_five = process(p, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
     pop_six = buffer_now(delay_five, p, dp1, dc1)  # 某个体在5-6
     process_new(pop_six[0], pop_six[1], pop_six[2], dp1, dc1)  # 添加与计算
-    return p
 
 
 def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
@@ -99,6 +112,14 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> l
 
 
 def six_merge(delay1, delay2, index1, index2):
+    """
+    在六处加工结束后，生成出工序六的顺序
+    :param delay1: 机器一延迟时间
+    :param delay2: 机器二延迟时间
+    :param index1: 顺序一
+    :param index2: 顺序二
+    :return:排好的顺序，对应的延迟时间
+    """
     delay1, delay2 = np.array(delay1), np.array(delay2)
     index_buffer = np.hstack((index1, index2))
     delay_time = np.hstack((delay1, delay2))
@@ -235,6 +256,11 @@ def six_decode(now_list, delay_time, dp, dc, choose):
 
 
 def undo(p):
+    """
+    解开禁忌表key的元组，返回加工元组
+    :param p:禁忌key，tuple
+    :return:被解开的key，加工路径
+    """
     p = np.array(p)
     indices = np.where(p == -1)[0]
     p = [p[:component_num],  # 1-5
@@ -245,6 +271,14 @@ def undo(p):
 
 
 def decode_6(delay, end_time, po, pn):
+    """
+    返回查找的延迟时间和全部时间
+    :param delay:延迟时间
+    :param end_time:全部加工过程
+    :param po: 原数组
+    :param pn: 新数组
+    :return:延迟，全部加工时间
+    """
     index = get_element_index(po, pn)
     delay_6 = six_decode(pn, np.array(delay)[index], dp1, dc1, 1)  # 6-1 延迟时间
     for k in range(len(index)):
