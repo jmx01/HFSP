@@ -40,11 +40,10 @@ def check_unique(p, part):
     判断是否已经在种群中
     :param p: 子个体第一段
     :param part: 种群
-    :return: 新种群
     """
     if np.any(np.all(p != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
-        part = np.r_[part, [np.concatenate(circle_list)]]
-        fitness(np.concatenate(circle_list))
+        part = np.r_[part, [p]]
+        fitness(p)
     return part
 
 
@@ -170,12 +169,6 @@ def buffer_now(delay: list, index: list, dp, dc):
     return index_sort, delay_sort, index_1t6
 
 
-def cross_index(index):
-    index_new = copy.deepcopy(index)
-    arg = range(len(index_new))
-    return arg, index_new
-
-
 def update_inhibit_dict(index_all, delay, dp, dc):
     """
     更新禁忌表
@@ -195,6 +188,27 @@ def update_inhibit_dict(index_all, delay, dp, dc):
         inhibit_dict[name] = 1e5 / process(ind, delay, dp, dc)[-1]
 
 
+def neighborhood_search(index, delay, dp, dc, key_words="cross"):
+    index_copy = copy.deepcopy(index)
+    index1, index2 = np.random.choice(component_num, size=2, replace=False)
+    if key_words == "cross":
+        index_copy[-1][index2], index_copy[-1][index1] = index_copy[-1][index1], index_copy[-1][index2]
+    elif key_words == "insert":
+        value = index_copy[-1][index1]
+        if index1 < index2:
+            index_copy[-1] = np.insert(index_copy[-1], index2, value)
+            index_copy[-1] = np.delete(index[-1], index1)
+        else:
+            index_copy[-1] = np.delete(index[-1], index1)
+            index_copy[-1] = np.insert(index_copy[-1], index2, value)
+    elif key_words == "reverse":
+        left, right = min(index1, index2), max(index1, index2)
+        index_copy[-1][left:right] = index_copy[-1][left:right][::-1]
+    else:
+        pass
+    update_inhibit_dict(index_copy, delay, dp, dc)
+
+
 def process_new(index, delay, index_16, dp, dc):
     """
     在7处的邻域搜索,求解
@@ -210,8 +224,9 @@ def process_new(index, delay, index_16, dp, dc):
     index_origin.append(index)
     update_inhibit_dict(index_origin, delay, dp, dc)
     # 交换一些顺序
-    arg1, index1 = cross_index(index)
-    delay1 = process(index1, delay[arg1], dp, dc)  # 前五个操作台结束时时间
+    neighborhood_search(index_origin, delay, dp, dc, action[0])
+    neighborhood_search(index_origin, delay, dp, dc, action[1])
+    neighborhood_search(index_origin, delay, dp, dc, action[2])
 
 
 def get_element_index(old_array, new_array):
@@ -317,6 +332,7 @@ num = np.arange(component_num)  # 生成初始数据
 circle_list = Hungarian_Algorithm()  # 最优循环
 delay_initial = [0] * component_num  # 初始延迟时间，为工件数序列
 population_elite_num = component_num  # 精英子个体数
+action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
 out_circle = 1000
 inside_circle = 50
