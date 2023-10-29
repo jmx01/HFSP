@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
-from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -32,28 +31,40 @@ def Hungarian_Algorithm():
     return use_circle
 
 
-def add_element(pop_num):
+def check_unique(p, part):
+    if np.any(np.all(p != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
+        part = np.r_[part, [np.concatenate(circle_list)]]
+        fitness(np.concatenate(circle_list))
+    return part
+
+
+def add_initial_element(pop_num):
     """
     向种群添加可重复精英解
     pop_num:总个体数
-    return:种群
+    return:空
     """
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
-    while len(part) <= population_elite_num:  # 添加精英解
+    while len(part) <= population_elite_num:
         out_layer = np.arange(len(circle_list))
         random.shuffle(out_layer)
         for k in range(len(circle_list)):
             start = random.randint(0, len(circle_list[k]) - 1)
             circle_list[k] = circle_list[k][start:] + circle_list[k][:start]
-        part = np.r_[part, [np.concatenate(circle_list)]]
+        part = check_unique(np.concatenate(circle_list), part)
 
     # 添加随机解
-    while len(part) < pop_num:  # 当小于子个体数时，添加随机解
+    while len(part) < pop_num:  # 当小于子个体数时
         random.shuffle(num)
-        if np.any(np.all(num != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
-            part = np.r_[part, [copy.deepcopy(num)]]
-    return part
+        part = check_unique(num, part)
+
+
+def fitness(p):
+    delay_five = process(p, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
+    pop_six = buffer_now(delay_five, p, dp1, dc1)  # 某个体在5-6
+    process_new(pop_six[0], pop_six[1], pop_six[2], dp1, dc1)  # 添加与计算
+    return p
 
 
 def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> list:
@@ -233,6 +244,14 @@ def undo(p):
     return p
 
 
+def decode_6(delay, end_time, po, pn):
+    index = get_element_index(po, pn)
+    delay_6 = six_decode(pn, np.array(delay)[index], dp1, dc1, 1)  # 6-1 延迟时间
+    for k in range(len(index)):
+        end_time[index[k]].append(delay_6[k])
+    return delay_6, end_time
+
+
 def decode(p):
     """
     解码子个体
@@ -240,8 +259,8 @@ def decode(p):
     :return:返回供甘特图使用的数据
     """
     delay_15, end_time_15 = process(p[0], delay_initial, dp1, dc1, range(5), complete=True)  # 1-5 延迟时间
-    delay_61 = six_decode(p[1], np.array(delay_15)[get_element_index(p[0], p[1])], dp1, dc1, 1)  # 6-1 延迟时间
-    delay_62 = six_decode(p[2], np.array(delay_15)[get_element_index(p[0], p[2])], dp1, dc1, 2)  # 6-2 延迟时间
+    delay_61, end_time_15 = decode_6(delay_15, end_time_15, p[0], p[1])
+    delay_62, end_time_15 = decode_6(delay_15, end_time_15, p[0], p[2])
 
     # 进入buffer的顺序和时间
     index_buffer, delay_buffer = six_merge(delay_61, delay_62, p[1], p[2])
@@ -253,7 +272,7 @@ def decode(p):
 
 
 # 零件号,机器号均减了1，记得最后要加1
-path = 'D:/desk/industry_synthesis/'
+path = 'D:/desk/industry_synthesis/数据/'
 dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
 dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
 # dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
@@ -265,23 +284,19 @@ circle_list = Hungarian_Algorithm()  # 最优循环
 delay_initial = [0] * component_num  # 初始延迟时间，为工件数序列
 population_elite_num = component_num  # 精英子个体数
 
-out_circle = 1
+out_circle = 1000
 inside_circle = 50
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 alpha = 1.2  # 六号工位二号机的加工时间系数
 
-best_time = []
-best_time_path = []
+best_time_series = []
 inhibit_dict = {}  # 空禁忌表
+add_initial_element(population_num)
 
-for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
-    population = add_element(population_num)  # 生成最优循环、精英解和随机解
-    for pop in population:
-        delay_five = process(pop, delay_initial, dp1, dc1, range(5))  # 前五个操作台结束时时间
-        pop_six = buffer_now(delay_five, pop, dp1, dc1)  # 某个体在5-6时分化为两个个体
-        process_new(pop_six[0], pop_six[1], pop_six[2], dp1, dc1)  # 添加与计算
-    # 种群迭代
+# for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+
+# 种群迭代
 inhibit_dict = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
 
 best_time = 1e5 / inhibit_dict[0][1]
