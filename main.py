@@ -224,9 +224,9 @@ def process_new(index, delay, index_16, dp, dc):
     index_origin.append(index)
     update_inhibit_dict(index_origin, delay, dp, dc)
     # 交换一些顺序
-    neighborhood_search(index_origin, delay, dp, dc, action[0])
-    neighborhood_search(index_origin, delay, dp, dc, action[1])
-    neighborhood_search(index_origin, delay, dp, dc, action[2])
+    neighborhood_search(index_origin, delay, dp, dc, action[0])  # 交换
+    neighborhood_search(index_origin, delay, dp, dc, action[1])  # 插入
+    neighborhood_search(index_origin, delay, dp, dc, action[2])  # 倒置
 
 
 def get_element_index(old_array, new_array):
