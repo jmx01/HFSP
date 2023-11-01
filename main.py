@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
+from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -179,10 +180,10 @@ def update_inhibit_dict(index_all, delay, dp, dc):
     :return: 空
     """
     ind = index_all[-1]
-    name = [*index_all[0]]
-    for k in range(len(index_all) - 1):
+    name = [*index_all[0], -1]
+    for ccc in range(len(index_all) - 1):
+        name.extend(index_all[ccc + 1])
         name.append(-1)
-        name.extend(index_all[k + 1])
     name = tuple(name)
     if name not in inhibit_dict.keys():
         inhibit_dict[name] = 1e5 / process(ind, delay, dp, dc)[-1]
@@ -195,10 +196,7 @@ def neighborhood_search(index, delay, dp, dc, key_words="cross"):
         index_copy[-1][index2], index_copy[-1][index1] = index_copy[-1][index1], index_copy[-1][index2]
     elif key_words == "insert":
         value = index_copy[-1][index1]
-        if index1 < index2:
-            index_copy[-1] = np.insert(index_copy[-1], index2, value)
-            index_copy[-1] = np.delete(index[-1], index1)
-        else:
+        if index1 > index2:
             index_copy[-1] = np.delete(index[-1], index1)
             index_copy[-1] = np.insert(index_copy[-1], index2, value)
     elif key_words == "reverse":
@@ -278,11 +276,10 @@ def undo(p):
     """
     p = np.array(p)
     indices = np.where(p == -1)[0]
-    p = [p[:component_num],  # 1-5
-         p[component_num + 1:indices[1]],  # 6-1
-         p[indices[1] + 1:-component_num - 1],  # 6-2
-         p[-component_num:]]  # 7-10
-    return p
+    new_p = [[*p[0:8]]]
+    for i in range(len(indices) - 1):
+        new_p.append(p[indices[i] + 1:indices[i + 1]])
+    return new_p
 
 
 def decode_6(delay, end_time, po, pn):
@@ -320,6 +317,24 @@ def decode(p):
     print(delay_710)
 
 
+def population_to_batch():
+    random.shuffle(population)
+    batch_pop = [population[i:i + component_num] for i in range(0, len(population), component_num)]
+    return batch_pop
+
+
+def fetch_parents(bi):
+    father_p = None
+    mother_p = None
+    return father_p, mother_p
+
+
+def generate_child(f, m):
+    c1 = None
+    c2 = None
+    return c1, c2
+
+
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/数据/'
 dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
@@ -334,25 +349,32 @@ delay_initial = [0] * component_num  # 初始延迟时间，为工件数序列
 population_elite_num = component_num  # 精英子个体数
 action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
-out_circle = 1000
+out_circle = 10
 inside_circle = 50
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
+half = population_num // 2
 alpha = 1.2  # 六号工位二号机的加工时间系数
 
 best_time_series = []
 inhibit_dict = {}  # 空禁忌表
 add_initial_element(population_num)
 
-# for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+    inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+    population = random.sample(inhibit_tuple[half:], half)
 
-# 种群迭代
-inhibit_dict = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+    for k in range(half):
+        population.append(inhibit_tuple[k])
+    inhibit_dict = dict(inhibit_tuple)
 
-best_time = 1e5 / inhibit_dict[0][1]
-best_path = undo(inhibit_dict[0][0])
-decode(best_path)
+    population_best_one = population[half + 1]
+    batch = population_to_batch()
 
-inhibit_dict = dict(inhibit_dict)
-print(best_time)
-print(best_path)
+    for b in batch:
+        for inner in range(inside_circle):
+            father, mother = fetch_parents(b)
+            child1_first, child2_first = generate_child(father, mother)
+
+
+print(len(inhibit_dict))
