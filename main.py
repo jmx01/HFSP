@@ -5,6 +5,7 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from plotly.figure_factory import create_gantt
 from scipy.optimize import linear_sum_assignment
 from tqdm import tqdm
 
@@ -314,7 +315,36 @@ def decode(p):
 
     # 7-10 延迟时间
     delay_710, end_time_710 = process(p[3], delay_buffer, dp1, dc1, complete=True)
-    print(delay_710)
+    end_index = get_element_index(p[3], p[0])
+
+    for e in range(len(end_time_15)):
+        end_time_15[e].pop(0)
+        end_time_710[end_index[e]].pop(0)
+        end_time_15[e].extend(end_time_710[end_index[e]])
+
+    start_time = []
+    for out in range(len(end_time_15)):
+        start_epoch = []
+        for inside in range(len(end_time_15[out])):
+            if inside != 5 or (p[0][out] not in p[1]):
+                start_epoch.append(end_time_15[out][inside] - dp1.iat[inside, p[0][out]])
+            else:
+                start_epoch.append(end_time_15[out][inside] - dp1.iat[inside, p[0][out]] * alpha)
+        start_time.append(start_epoch)
+
+    gantt = []
+    for component in range(component_num):
+        for machine in range(10):
+            gantt.append([component + 1, start_time[component][machine], end_time_15[component][machine], machine + 1])
+    gantt = pd.DataFrame(gantt, columns=["Task", "Start", "Finish", "Resource"])
+
+    datetime = pd.Timestamp('20231128 14:00:00')
+    for i in range(len(gantt)):
+        gantt['Start'].loc[i] = datetime + pd.Timedelta(seconds=gantt['Start'].loc[i])
+        gantt['Finish'].loc[i] = datetime + pd.Timedelta(seconds=gantt['Finish'].loc[i])
+    gantt['Resource'] = gantt['Resource'].astype(str)
+    fig = create_gantt(gantt, index_col='Resource', reverse_colors=True, show_colorbar=True, group_tasks=True)
+    fig.show()
 
 
 def population_to_batch():
@@ -376,5 +406,6 @@ for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
             father, mother = fetch_parents(b)
             child1_first, child2_first = generate_child(father, mother)
 
-
 print(len(inhibit_dict))
+decode(undo(next(iter(inhibit_dict))))
+print("end")
