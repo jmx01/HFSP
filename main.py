@@ -38,16 +38,6 @@ def Hungarian_Algorithm():
     return use_circle
 
 
-def fitness(ppp):
-    """
-    计算适应度
-    :param ppp: 子个体，被解码的
-    """
-    delay_five = process(ppp, delay_initial, np.arange(5))[0]  # 前五个操作台结束时时间
-    pop_six = buffer_now(delay_five, ppp, dp1, dc1)  # 某个体在5-6
-    process_new(pop_six[0], pop_six[1], pop_six[2])  # 添加与计算
-
-
 def check_unique(ppp, part):
     """
     判断是否已经在种群中
@@ -56,7 +46,9 @@ def check_unique(ppp, part):
     """
     if np.any(np.all(ppp != part, axis=1)):  # 如果新产生的子个体不在种群中则添加
         part = np.r_[part, [ppp]]
-        fitness(ppp)
+        delay_five = process(ppp, delay_initial, np.arange(5))[0]  # 前五个操作台结束时时间
+        pop_six = buffer_now(delay_five, ppp)  # 某个体在5-6
+        process_new(pop_six[0], pop_six[1], pop_six[2])  # 添加与计算
     return part
 
 
@@ -126,57 +118,55 @@ def six_merge(delay1, delay2, index1, index2):
     return index_sort, delay_sort
 
 
-def buffer_now(delay: list, index: list, dp, dc):
+def buffer_now(delay: list, index: list):
     """
     计算进入buffer时的状态
     :param delay:出工序5时的延迟
     :param index:出工序5的顺序
-    :param dp:操作时间
-    :param dc:换模时间
     :return:进入buffer的顺序，延迟时间，1-buffer的顺序
     """
     first, second = [], []
     delay_time1, delay_time2 = [], []
 
     first.append(index[0])
-    delay_time1.append(delay[0] + dp.iat[5, index[0]])
+    delay_time1.append(delay[0] + dp_new[5, index[0]])
     deed = 1  # 已加工个数
     while deed < len(index):  # 当还有工件未完成时
-        if random.random() < p:
+        if np.random.random() < p:
             if not first:  # 当first为空时
                 first.append(index[deed])
-                delay_time1.append(delay[deed] + dp.iat[5, index[deed]])
+                delay_time1.append(delay[deed] + dp_new[5, index[deed]])
             elif not second:  # first不为空,second为空
                 second.append(index[deed])
-                delay_time2.append(delay[deed] + dp.iat[5, index[deed]] * alpha)
+                delay_time2.append(delay[deed] + dp_new[5, index[deed]] * alpha)
             else:  # 均不为空
                 if delay_time1[-1] > delay_time2[-1]:
                     second.append(index[deed])
                     delay_time2.append(
-                        max(delay[deed], delay_time2[-1]) + dc.iat[second[-2], second[-1]] + dp.iat[
+                        max(delay[deed], delay_time2[-1]) + dc_new[second[-2], second[-1]] + dp_new[
                             5, index[deed]] * alpha)
                 else:
                     first.append(index[deed])
                     delay_time1.append(
-                        max(delay[deed], delay_time1[-1]) + dc.iat[first[-2], first[-1]] + dp.iat[
+                        max(delay[deed], delay_time1[-1]) + dc_new[first[-2], first[-1]] + dp_new[
                             5, index[deed]])
         else:
             if not second:  # 当second为空时
                 second.append(index[deed])
-                delay_time2.append(delay[deed] + dp.iat[5, index[deed]] * alpha)
+                delay_time2.append(delay[deed] + dp_new[5, index[deed]] * alpha)
             elif not first:  # second不为空,first为空
                 first.append(index[deed])
-                delay_time1.append(delay[deed] + dp.iat[5, index[deed]])
+                delay_time1.append(delay[deed] + dp_new[5, index[deed]])
             else:  # 均不为空
                 if delay_time1[-1] <= delay_time2[-1]:
                     first.append(index[deed])
                     delay_time1.append(
-                        max(delay[deed], delay_time1[-1]) + dc.iat[first[-2], first[-1]] + dp.iat[
+                        max(delay[deed], delay_time1[-1]) + dc_new[first[-2], first[-1]] + dp_new[
                             5, index[deed]])
                 else:
                     second.append(index[deed])
                     delay_time2.append(
-                        max(delay[deed], delay_time2[-1]) + dc.iat[second[-2], second[-1]] + dp.iat[
+                        max(delay[deed], delay_time2[-1]) + dc_new[second[-2], second[-1]] + dp_new[
                             5, index[deed]] * alpha)
         deed += 1
 
@@ -489,7 +479,7 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
         adorable_times -= 1
 
     for cc in range(len(cf)):
-        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc], dp1, dc1)
+        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
         process_new(index, delay, index1_6)
 
 
@@ -500,13 +490,13 @@ def work(bi):
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/数据/'
-reed = 1
+reed = 2
 dp1 = pd.read_csv(path + 'case' + str(reed) + '_process.csv')
 dc1 = pd.read_csv(path + 'case' + str(reed) + '_time.csv')
 dp_new = np.array(dp1)
 dc_new = np.array(dc1)
 row, col = np.diag_indices_from(dc_new)
-dc_new[row,col] = 1e5
+dc_new[row, col] = 1e5
 
 component_num = dp1.shape[1]  # 工件数
 num = np.arange(component_num)  # 生成初始数据
@@ -515,7 +505,7 @@ delay_initial = np.zeros(component_num)  # 初始延迟时间，为工件数序�
 population_elite_num = component_num  # 精英子个体数
 action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
-out_circle = 4
+out_circle = 10
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 half = population_num // 2
@@ -532,7 +522,7 @@ for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
     population.extend(random.sample(inhibit_tuple[half:200], half))
     inhibit_dict = dict(inhibit_tuple)
 
-    population_best_one = population[half + 1]
+    population_best_one = population[0]
     batch = population_to_batch()
 
     for b in batch:
@@ -544,13 +534,14 @@ for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
             tp[t].join()
 
     best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
-    print(inhibit_tuple[0])
+
 
 print(len(inhibit_dict))
 inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+print(inhibit_tuple[0])
 decode(undo(inhibit_tuple[0][0])[0])
 plt.plot(best_time_series)
-plt.show()
+# plt.show()
 
 # 优秀解
 # decode([[5, 1, 6, 0, 4, 7, 3, 2], [6, 0, 4, 3], [5, 1, 7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])
