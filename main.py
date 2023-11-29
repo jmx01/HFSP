@@ -1,7 +1,7 @@
 import copy
+import multiprocessing
 import operator
 import random
-import threading
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -95,16 +95,16 @@ def process(now_list, delay_time, dp, dc, arr=range(6, 10), complete=False) -> l
     """
     end_time = []  # 每个操作台的结束时间
 
-    for i in range(len(now_list)):  # 第几个元素
-        epoch = [delay_time[i]]
+    for xx in range(len(now_list)):  # 第几个元素
+        epoch = [delay_time[xx]]
         for j in arr:  # 每个元素在每台机器处的到达时间
-            if i == 0:  # 当是子个体的第一个加工工件
-                epoch.append(dp.iat[j, now_list[i]] + epoch[-1])  # 此工作台的延迟时间为操作时间+上一个工作台的延迟时间
+            if xx == 0:  # 当是子个体的第一个加工工件
+                epoch.append(dp.iat[j, now_list[xx]] + epoch[-1])  # 此工作台的延迟时间为操作时间+上一个工作台的延迟时间
 
             else:  # 当不是子个体的第一个加工工件
                 start_time = max(end_time[-1][j - arr[0] + 1], epoch[-1]) + dc.iat[
-                    now_list[i - 1], now_list[i]]  # 起始操作时间为max(上一个工件此操作台的延迟时间，此工件上一个工作台的操作时间)+换模时间
-                epoch.append(start_time + dp.iat[j, now_list[i]])  # 此工作台的延迟时间为起始操作时间+操作时间
+                    now_list[xx - 1], now_list[xx]]  # 起始操作时间为max(上一个工件此操作台的延迟时间，此工件上一个工作台的操作时间)+换模时间
+                epoch.append(start_time + dp.iat[j, now_list[xx]])  # 此工作台的延迟时间为起始操作时间+操作时间
         end_time.append(epoch)  # 每个工件在每个操作台的结束时间
 
     if not complete:
@@ -155,16 +155,16 @@ def buffer_now(delay: list, index: list, dp, dc):
                 second.append(index[deed])
                 delay_time2.append(delay[deed] + dp.iat[5, index[deed]] * alpha)
             else:  # 均不为空
-                if delay_time1[-1] <= delay_time2[-1]:
-                    first.append(index[deed])
-                    delay_time1.append(
-                        max(delay[deed], delay_time1[-1]) + dc.iat[first[-2], first[-1]] + dp.iat[
-                            5, index[deed]])
-                else:
+                if delay_time1[-1] > delay_time2[-1]:
                     second.append(index[deed])
                     delay_time2.append(
                         max(delay[deed], delay_time2[-1]) + dc.iat[second[-2], second[-1]] + dp.iat[
                             5, index[deed]] * alpha)
+                else:
+                    first.append(index[deed])
+                    delay_time1.append(
+                        max(delay[deed], delay_time1[-1]) + dc.iat[first[-2], first[-1]] + dp.iat[
+                            5, index[deed]])
         else:
             if not second:  # 当second为空时
                 second.append(index[deed])
@@ -274,8 +274,8 @@ def cross(index, key_words="cross", times=1):
 
 def neighborhood_search(index, delay, dp, dc, key_words="cross"):
     index_copy = cross(index, key_words, 10)
-    for i in index_copy:
-        update_inhibit_dict(i, delay, dp, dc)
+    for u in index_copy:
+        update_inhibit_dict(u, delay, dp, dc)
 
 
 def process_new(index, delay, index_16, dp, dc):
@@ -394,7 +394,7 @@ def decode(p):
     for out in range(len(end_time_15)):
         start_epoch = []
         for inside in range(len(end_time_15[out])):
-            if p[0][out] in p[1]:
+            if p[0][out] in p[1] and inside == 5:
                 start_epoch.append(end_time_15[out][inside] - dp1.iat[inside, p[0][out]] * alpha)
             else:
                 start_epoch.append(end_time_15[out][inside] - dp1.iat[inside, p[0][out]])
@@ -404,7 +404,7 @@ def decode(p):
     datetime = pd.Timestamp('20231128 14:00:00')
     for component in range(component_num):
         for machine in range(10):
-            gantt.append([component + 1, datetime + pd.Timedelta(seconds=start_time[component][machine]),
+            gantt.append([p[0][component] + 1, datetime + pd.Timedelta(seconds=start_time[component][machine]),
                           datetime + pd.Timedelta(seconds=end_time_15[component][machine]), machine + 1])
     gantt = pd.DataFrame(gantt, columns=["Task", "Start", "Finish", "Resource"])
     gantt['Resource'] = gantt['Resource'].astype(str)
@@ -473,10 +473,9 @@ def work(bi):
 
 # 零件号,机器号均减了1，记得最后要加1
 path = 'D:/desk/industry_synthesis/数据/'
-dp1 = pd.read_csv(path + 'case1_process.csv')  # case1_process
-dc1 = pd.read_csv(path + 'case1_time.csv')  # case1_change
-# dp1 = pd.read_csv(path + 'case2_process.csv')  # case2_process
-# dc1 = pd.read_csv(path + 'case2_time.csv')  # case2_change
+reed = 1
+dp1 = pd.read_csv(path + 'case' + str(reed) + '_process.csv')
+dc1 = pd.read_csv(path + 'case' + str(reed) + '_time.csv')
 
 component_num = dp1.shape[1]  # 工件数
 num = np.arange(component_num)  # 生成初始数据
@@ -490,41 +489,53 @@ population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 half = population_num // 2
 alpha = 1.2  # 六号工位二号机的加工时间系数
-p = alpha / (1 + alpha)  # 天然选择一号机的概率
+p = 0.9  # 天然选择一号机的概率
 
 best_time_series = []
 inhibit_dict = {}  # 空禁忌表
-add_initial_element(population_num)
-for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+
+if __name__ == "__main__":
+    add_initial_element(population_num)
+    for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+        inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+        population = random.sample(inhibit_tuple[half:200], half)
+
+        for k in range(half):
+            population.append(inhibit_tuple[k])
+        inhibit_dict = dict(inhibit_tuple)
+
+        population_best_one = population[half + 1]
+        batch = population_to_batch()
+
+        for b in batch:
+
+            # t1 = threading.Thread(target=work, args=(b,))
+            # t2 = threading.Thread(target=work, args=(b,))
+            # t3 = threading.Thread(target=work, args=(b,))
+            # t4 = threading.Thread(target=work, args=(b,))
+            # t5 = threading.Thread(target=work, args=(b,))
+            # t6 = threading.Thread(target=work, args=(b,))
+
+            # t1.start()
+            # t2.start()
+            # t3.start()
+            # t4.start()
+            # t5.start()
+            # t6.start()
+
+        inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+        inhibit_dict = dict(inhibit_tuple)
+        best_time_series.append(1e5 / inhibit_tuple[0][-1])
+        print(inhibit_tuple[0])
+
+    print(len(inhibit_dict))
     inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
-    population = random.sample(inhibit_tuple[half:200], half)
-
-    for k in range(half):
-        population.append(inhibit_tuple[k])
-    inhibit_dict = dict(inhibit_tuple)
-
-    population_best_one = population[half + 1]
-    batch = population_to_batch()
-
-    for b in batch:
-        t1 = threading.Thread(target=work, kwargs={"bi": b})
-        t2 = threading.Thread(target=work, kwargs={"bi": b})
-        t3 = threading.Thread(target=work, kwargs={"bi": b})
-        t4 = threading.Thread(target=work, kwargs={"bi": b})
-        t5 = threading.Thread(target=work, kwargs={"bi": b})
-        t6 = threading.Thread(target=work, kwargs={"bi": b})
-
-        t1.start()
-        t2.start()
-        t3.start()
-        t4.start()
-        t5.start()
-        t6.start()
-
-print(len(inhibit_dict))
-decode(undo(next(iter(inhibit_dict))))
-# decode([[5, 1, 6, 0, 4, 7, 3, 2], [6, 0, 4, 3], [5, 1, 7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])
-# decode([[0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14],
-#         [0, 7, 8, 2, 9, 10, 11, 13],
-#         [6, 5, 3, 1, 4, 15, 12, 14],
-#         [0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14]])
+    decode(undo(inhibit_tuple[0][0]))
+    plt.plot(best_time_series)
+    plt.show()
+    # 优秀解
+    # decode([[5, 1, 6, 0, 4, 7, 3, 2], [6, 0, 4, 3], [5, 1, 7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])
+    # decode([[0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14],
+    #         [0, 7, 8, 2, 9, 10, 11, 13],
+    #         [6, 5, 3, 1, 4, 15, 12, 14],
+    #         [0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14]])
