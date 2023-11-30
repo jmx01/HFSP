@@ -403,6 +403,8 @@ def ox(solution1, solution2):
     #     index_c2 = get_element_index(ccc1, fix2)
     #
     # return ccc1, ccc2
+    solution1 = list(solution1)
+    solution2 = list(solution2)
     if len(solution1) == 2:
         rand = [0, 1]
         random.shuffle(rand)
@@ -438,82 +440,43 @@ def ox(solution1, solution2):
 
 def generate_child(f, m, bf, adorable_times=20, child_num=5):
     ad_num = 1e5 / bf * 0.6
-    cf = [f, m]
-    cdf = []
+    f = np.array(f)
+    m = np.array(m)
+    cf = np.stack((f, m), 0)
+    cdf = process(f, delay_initial, np.arange(5))[0]
+    cdf = np.row_stack((cdf, process(m, delay_initial, np.arange(5))[0]))
     for i in range(child_num):
         c1, c2 = ox(f, m)
-        cf.append(c1)
-        cf.append(c2)
-    for cc in cf:
-        ccp = np.array(cc)
-        cdf.append(process(ccp, delay_initial, np.arange(5))[0])
+        c1, c2 = np.array(c1), np.array(c2)
+        cf = np.row_stack((cf, c1, c2))
+        cdf = np.row_stack(
+            (cdf, process(c1, delay_initial, np.arange(5))[0], process(c2, delay_initial, np.arange(5))[0]))
 
     while adorable_times >= 0:
-        now = random.randint(0, len(cf) - 1)
+        now = np.random.randint(0, len(cf))
         if cdf[now][-1] > ad_num:
-            cf.pop(now)
-            cdf.pop(now)
-            new1, new2 = random.sample(cf, 2)
-            c1, c2 = ox(copy.deepcopy(new1), copy.deepcopy(new2))
-            cf.append(c1)
-            cf.append(c2)
-            c1p = np.array(c1)
-            c2p = np.array(c2)
-            cdf.append(process(c1p, delay_initial, np.arange(5))[0])
-            cdf.append(process(c2p, delay_initial, np.arange(5))[0])
+            cf = np.delete(cf, now, 0)
+            cdf = np.delete(cdf, now, 0)
+            new1, new2 = cf[np.random.choice(cf.shape[0], 2, replace=False)]
+            c1, c2 = ox(new1, new2)
+            c1, c2 = np.array(c1), np.array(c2)
+            cf = np.row_stack((cf, c1, c2))
+            cdf = np.row_stack(
+                (cdf, process(c1, delay_initial, np.arange(5))[0], process(c2, delay_initial, np.arange(5))[0]))
         adorable_times -= 1
 
     adorable_times = 20
     ad_num = 1e5 / bf * 0.8
     while len(cf) >= 2 and adorable_times > 0:
-        now = random.randint(0, len(cf) - 1)
+        now = np.random.randint(0, len(cf))
         if cdf[now][-1] > ad_num:
-            cf.pop(now)
-            cdf.pop(now)
+            cf = np.delete(cf, now, 0)
+            cdf = np.delete(cdf, now, 0)
         adorable_times -= 1
 
     for cc in range(len(cf)):
-        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc], dp1, dc1)
+        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
         process_new(index, delay, index1_6)
-
-    # ad_num = 1e5 / bf * 0.8
-    # cf = [f, m]
-    # cdf = []
-    # for i in range(child_num):
-    #     c1, c2 = ox(f, m)
-    #     cf.append(c1)
-    #     cf.append(c2)
-    # for cc in cf:
-    #     ccp = np.array(cc)
-    #     cdf.append(process(ccp, delay_initial, np.arange(5))[0])
-    #
-    # while adorable_times >= 0:
-    #     now = random.randint(0, len(cf) - 1)
-    #     if cdf[now][-1] > ad_num:
-    #         cf.pop(now)
-    #         cdf.pop(now)
-    #         new1, new2 = random.sample(cf, 2)
-    #         c1, c2 = ox(copy.deepcopy(new1), copy.deepcopy(new2))
-    #         cf.append(c1)
-    #         cf.append(c2)
-    #         c1p = np.array(c1)
-    #         c2p = np.array(c2)
-    #         cdf.append(process(c1p, delay_initial, np.arange(5))[0])
-    #         cdf.append(process(c2p, delay_initial, np.arange(5))[0])
-    #     adorable_times -= 1
-    #
-    # adorable_times = 20
-    # ad_num = 1e5 / bf * 0.8
-    # while len(cf) >= 2 and adorable_times > 0:
-    #     now = random.randint(0, len(cf) - 1)
-    #     if cdf[now][-1] > ad_num:
-    #         cf.pop(now)
-    #         cdf.pop(now)
-    #     adorable_times -= 1
-    #
-    # for cc in range(len(cf)):
-    #     index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
-    #     process_new(index, delay, index1_6)
 
 
 def work(bi):
