@@ -437,46 +437,7 @@ def ox(solution1, solution2):
 
 
 def generate_child(f, m, bf, adorable_times=20, child_num=5):
-    # ad_num = 1e5 / bf * 0.6
-    # cf = [f, m]
-    # cdf = []
-    # for i in range(child_num):
-    #     c1, c2 = ox(f, m)
-    #     cf.append(c1)
-    #     cf.append(c2)
-    # for cc in cf:
-    #     ccp = np.array(cc)
-    #     cdf.append(process(ccp, delay_initial, np.arange(5))[0])
-    #
-    # while adorable_times >= 0:
-    #     now = random.randint(0, len(cf) - 1)
-    #     if cdf[now][-1] > ad_num:
-    #         cf.pop(now)
-    #         cdf.pop(now)
-    #         new1, new2 = random.sample(cf, 2)
-    #         c1, c2 = ox(copy.deepcopy(new1), copy.deepcopy(new2))
-    #         cf.append(c1)
-    #         cf.append(c2)
-    #         c1p = np.array(c1)
-    #         c2p = np.array(c2)
-    #         cdf.append(process(c1p, delay_initial, np.arange(5))[0])
-    #         cdf.append(process(c2p, delay_initial, np.arange(5))[0])
-    #     adorable_times -= 1
-    #
-    # adorable_times = 20
-    # ad_num = 1e5 / bf * 0.8
-    # while len(cf) >= 2 and adorable_times > 0:
-    #     now = random.randint(0, len(cf) - 1)
-    #     if cdf[now][-1] > ad_num:
-    #         cf.pop(now)
-    #         cdf.pop(now)
-    #     adorable_times -= 1
-    #
-    # for cc in range(len(cf)):
-    #     index, delay, index1_6 = buffer_now(cdf[cc], cf[cc], dp1, dc1)
-    #     process_new(index, delay, index1_6)
-
-    ad_num = 1e5 / bf * 0.8
+    ad_num = 1e5 / bf * 0.6
     cf = [f, m]
     cdf = []
     for i in range(child_num):
@@ -512,8 +473,47 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
         adorable_times -= 1
 
     for cc in range(len(cf)):
-        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
+        index, delay, index1_6 = buffer_now(cdf[cc], cf[cc], dp1, dc1)
         process_new(index, delay, index1_6)
+
+    # ad_num = 1e5 / bf * 0.8
+    # cf = [f, m]
+    # cdf = []
+    # for i in range(child_num):
+    #     c1, c2 = ox(f, m)
+    #     cf.append(c1)
+    #     cf.append(c2)
+    # for cc in cf:
+    #     ccp = np.array(cc)
+    #     cdf.append(process(ccp, delay_initial, np.arange(5))[0])
+    #
+    # while adorable_times >= 0:
+    #     now = random.randint(0, len(cf) - 1)
+    #     if cdf[now][-1] > ad_num:
+    #         cf.pop(now)
+    #         cdf.pop(now)
+    #         new1, new2 = random.sample(cf, 2)
+    #         c1, c2 = ox(copy.deepcopy(new1), copy.deepcopy(new2))
+    #         cf.append(c1)
+    #         cf.append(c2)
+    #         c1p = np.array(c1)
+    #         c2p = np.array(c2)
+    #         cdf.append(process(c1p, delay_initial, np.arange(5))[0])
+    #         cdf.append(process(c2p, delay_initial, np.arange(5))[0])
+    #     adorable_times -= 1
+    #
+    # adorable_times = 20
+    # ad_num = 1e5 / bf * 0.8
+    # while len(cf) >= 2 and adorable_times > 0:
+    #     now = random.randint(0, len(cf) - 1)
+    #     if cdf[now][-1] > ad_num:
+    #         cf.pop(now)
+    #         cdf.pop(now)
+    #     adorable_times -= 1
+    #
+    # for cc in range(len(cf)):
+    #     index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
+    #     process_new(index, delay, index1_6)
 
 
 def work(bi):
