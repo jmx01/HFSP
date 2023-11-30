@@ -9,6 +9,7 @@ import pandas as pd
 from numba import jit
 from plotly.figure_factory import create_gantt
 from scipy.optimize import linear_sum_assignment
+from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -118,7 +119,32 @@ def six_merge(delay1, delay2, index1, index2):
     return index_sort, delay_sort
 
 
-def buffer_now(delay: list, index: list):
+def dynamic_buffer(index, delay, machine, deed, delay_time, way):
+    if way == 1:
+        if machine:
+            machine.append(index[deed])
+            delay_time.append(
+                max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[5, index[deed]])
+            idle = delay_time[-1]
+        else:  # 当first为空
+            machine.append(index[deed])
+            delay_time.append(delay[deed] + dp_new[5, index[deed]])
+            idle = delay_time[-1]
+    else:
+        if not machine:  # 当first为空
+            machine.append(index[deed])
+            delay_time.append(delay[deed] + dp_new[5, index[deed]])
+            idle = delay_time[-1]
+        else:
+            machine.append(index[deed])
+            delay_time.append(
+                max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[5, index[deed]] * alpha)
+            idle = delay_time[-1]
+    deed += 1
+    return machine, deed, delay_time, idle
+
+
+def buffer_now(delay, index):
     """
     计算进入buffer时的状态
     :param delay:出工序5时的延迟
@@ -127,48 +153,20 @@ def buffer_now(delay: list, index: list):
     """
     first, second = [], []
     delay_time1, delay_time2 = [], []
+    idle1, idle2 = 0, 0  # 当前机器的空闲时间
+    deed = 0
 
-    first.append(index[0])
-    delay_time1.append(delay[0] + dp_new[5, index[0]])
-    deed = 1  # 已加工个数
-    while deed < len(index):  # 当还有工件未完成时
-        if np.random.random() < count_p:
-            if not first:  # 当first为空时
-                first.append(index[deed])
-                delay_time1.append(delay[deed] + dp_new[5, index[deed]])
-            elif not second:  # first不为空,second为空
-                second.append(index[deed])
-                delay_time2.append(delay[deed] + dp_new[5, index[deed]] * alpha)
-            else:  # 均不为空
-                if delay_time1[-1] > delay_time2[-1]:
-                    second.append(index[deed])
-                    delay_time2.append(
-                        max(delay[deed], delay_time2[-1]) + dc_new[second[-2], second[-1]] + dp_new[
-                            5, index[deed]] * alpha)
-                else:
-                    first.append(index[deed])
-                    delay_time1.append(
-                        max(delay[deed], delay_time1[-1]) + dc_new[first[-2], first[-1]] + dp_new[
-                            5, index[deed]])
-        else:
-            if not second:  # 当second为空时
-                second.append(index[deed])
-                delay_time2.append(delay[deed] + dp_new[5, index[deed]] * alpha)
-            elif not first:  # second不为空,first为空
-                first.append(index[deed])
-                delay_time1.append(delay[deed] + dp_new[5, index[deed]])
-            else:  # 均不为空
-                if delay_time1[-1] <= delay_time2[-1]:
-                    first.append(index[deed])
-                    delay_time1.append(
-                        max(delay[deed], delay_time1[-1]) + dc_new[first[-2], first[-1]] + dp_new[
-                            5, index[deed]])
-                else:
-                    second.append(index[deed])
-                    delay_time2.append(
-                        max(delay[deed], delay_time2[-1]) + dc_new[second[-2], second[-1]] + dp_new[
-                            5, index[deed]] * alpha)
-        deed += 1
+    while deed < len(index):
+        if delay[deed] >= idle1 and delay[deed] >= idle2:  # 两机器都有空闲
+            if np.random.random() < buffer_p:
+                first, deed, delay_time1, idle1 = dynamic_buffer(index, delay, first, deed, delay_time1, 1)
+            else:
+                second, deed, delay_time2, idle2 = dynamic_buffer(index, delay, second, deed, delay_time2, 2)
+            continue
+        if idle1 < idle2:  # 机器1先空闲
+            first, deed, delay_time1, idle1 = dynamic_buffer(index, delay, first, deed, delay_time1, 1)
+        else:  # 机器2先空闲
+            second, deed, delay_time2, idle2 = dynamic_buffer(index, delay, second, deed, delay_time2, 2)
 
     first, second = np.array(first), np.array(second)
     index_sort, delay_sort = six_merge(delay_time1, delay_time2, first, second)
@@ -183,19 +181,30 @@ def update_inhibit_dict(index_all, delay):
     :param delay: 进入7时的延迟时间
     :return: 空
     """
-    name = tuple(np.concatenate((index_all[0], [-1], index_all[1], [-1], index_all[2], [-1], index_all[3], [-1])))
-    if name not in inhibit_dict.keys():
-        inhibit_dict[name] = 1e5 / process(index_all[-1], delay)[0][-1]
+    i0, i3 = np.array(index_all[0]), np.array(index_all[3])
+    if not (i0 == i3).all():
+        name = tuple(np.concatenate((i0, [-1], index_all[1], [-1], index_all[2], [-1], i3, [-1])))
+        if name not in inhibit_dict.keys():
+            inhibit_dict[name] = 1e5 / process(index_all[-1], delay)[0][-1]
+    else:
+        pass
 
 
 def ox(solution1, solution2):
-    """
-    交换函数，交换两个等长列表的部分指定区域
-    :param solution1: 列表1
-    :param solution2: 列表2
-    :return: [子列表1，子列表2]
-    """
-    "找两个不一样的点"
+    # solution1 = np.array(solution1)
+    # solution2 = np.array(solution2)
+    # ccc1, ccc2 = solution1, solution2
+    # if (solution1 == solution2).all():
+    #     np.random.shuffle(solution2)
+    #     ccc2 = np.random.permutation(solution2)
+    # else:
+    #     index = np.sort(np.random.choice(component_num, 2, replace=False))
+    #     fix1, fix2 = ccc1[index[0]:index[1]], ccc2[index[0]:index[1]]
+    #     res1, res2 = np.concatenate(ccc1[:index[0]], ccc1[index[1]:]), np.concatenate(ccc2[:index[0]], ccc2[index[1]:])
+    #     index_c1 = get_element_index(ccc2, fix1)
+    #     index_c2 = get_element_index(ccc1, fix2)
+    #
+    # return ccc1, ccc2
     if len(solution1) == 2:
         rand = [0, 1]
         random.shuffle(rand)
@@ -277,6 +286,7 @@ def process_new(index, delay, index_16):
     neighborhood_search(index_origin, delay, action[2])  # 倒置
 
 
+@jit(nopython=True)
 def get_element_index(old_array, new_array):
     """
     用来寻找新数组在旧数组的索引
@@ -330,6 +340,7 @@ def undo(ppp):
     return new_p, p0
 
 
+@jit(nopython=True)
 def decode_6(delay, end_time, p0, p1, p2):
     index1 = get_element_index(p0, p1)
     index2 = get_element_index(p0, p2)
@@ -337,7 +348,7 @@ def decode_6(delay, end_time, p0, p1, p2):
     delay_62 = six_decode(p2, delay[index2], 2)
     index_buffer = np.hstack((index1, index2))
     delay_time = np.hstack((delay_61, delay_62))
-    end_time = np.c_[end_time[index_buffer], delay_time]
+    end_time = np.column_stack((end_time[index_buffer], delay_time))
     end_time = end_time[get_element_index(index_buffer, np.arange(component_num))]
     return delay_61, delay_62, end_time
 
@@ -362,7 +373,7 @@ def decode(ppp):
 
     end_time_15 = np.delete(end_time_15, 0, axis=1)
     end_time_710 = np.delete(end_time_710, 0, axis=1)
-    end_time_15 = np.c_[end_time_15, end_time_710[end_index]]
+    end_time_15 = np.column_stack((end_time_15, end_time_710[end_index]))
 
     start_time = np.zeros((component_num, 10))
     for out in range(component_num):
@@ -372,6 +383,7 @@ def decode(ppp):
             else:
                 start_time[out][inside] = end_time_15[out][inside] - dp_new[inside, ppp[0][out]]
 
+    # gantt图绘制
     gantt = []
     datetime = pd.Timestamp('20231128 14:00:00')
     for component in range(component_num):
@@ -445,7 +457,7 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
     #     index, delay, index1_6 = buffer_now(cdf[cc], cf[cc], dp1, dc1)
     #     process_new(index, delay, index1_6)
 
-    ad_num = 1e5 / bf * 0.6
+    ad_num = 1e5 / bf * 0.8
     cf = [f, m]
     cdf = []
     for i in range(child_num):
@@ -505,23 +517,23 @@ population_elite_num = component_num  # 精英子个体数
 action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
 out_circle = 100
-inside_circle = 1
 thread_num = 6
-all_circle = out_circle * inside_circle * thread_num * 10
+all_circle = out_circle * thread_num * 10
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 half = population_num // 2
 alpha = 1.2  # 六号工位二号机的加工时间系数
 count = 0  # 重复迭代数
 count_p = 1 - count / all_circle
+buffer_p = 0.5
 
-best_time_series = [20000]
+best_time_series = []
 inhibit_dict = {}  # 空禁忌表
 
 add_initial_element(population_num)
-# for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
-while best_time_series[-1] >= 10947:
+for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
     inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
+    best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
     population = inhibit_tuple[0:half]
     population.extend(random.sample(inhibit_tuple[half:200], half))
     inhibit_dict = dict(inhibit_tuple)
@@ -530,7 +542,6 @@ while best_time_series[-1] >= 10947:
     batch = population_to_batch()
 
     for b in batch:
-        # for _ in np.arange(inside_circle):
         tp = []
         for t in np.arange(thread_num):
             tp.append(threading.Thread(target=work, args=(b,)))
@@ -543,19 +554,17 @@ while best_time_series[-1] >= 10947:
                 count_p = 1 - count / all_circle
             else:
                 count = 0
-    # best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
-    print("已循环一次")
 
 print(len(inhibit_dict))
 inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
-print(inhibit_tuple[0])
 decode(undo(inhibit_tuple[0][0])[0])
 plt.plot(best_time_series)
 plt.show()
 
 # 优秀解
 # decode([[5, 1, 6, 0, 4, 7, 3, 2], [6, 0, 4, 3], [5, 1, 7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])
-# decode([[0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14],
-#         [0, 7, 8, 2, 9, 10, 11, 13],
-#         [6, 5, 3, 1, 4, 15, 12, 14],
-#         [0, 6, 7, 5, 8, 3, 2, 1, 9, 4, 10, 15, 11, 12, 13, 14]])
+# decode([[5, 1, 6, 0, 4, 7, 3, 2], [5, 1, 6, 0, 4, 3], [7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])  # 也行
+# decode([[6, 7, 15, 5, 8, 3, 2, 1, 9, 4, 10, 0, 12, 13, 14, 11],
+#         [6, 15, 8, 2, 9, 10, 13, 11],
+#         [7, 5, 3, 1, 4, 0, 12, 14],
+#         [6, 7, 15, 5, 8, 3, 2, 1, 9, 4, 10, 0, 12, 13, 14, 11]])
