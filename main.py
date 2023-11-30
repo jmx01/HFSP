@@ -119,27 +119,24 @@ def six_merge(delay1, delay2, index1, index2):
     return index_sort, delay_sort
 
 
+@jit(nopython=True)
 def dynamic_buffer(index, delay, machine, deed, delay_time, way):
+    machine = np.append(machine, index[deed])
     if way == 1:
-        if machine:
-            machine.append(index[deed])
-            delay_time.append(
-                max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[5, index[deed]])
-            idle = delay_time[-1]
+        if len(machine) != 1:
+            delay_time = np.append(delay_time,
+                                   max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[
+                                       5, index[deed]])
         else:  # 当first为空
-            machine.append(index[deed])
-            delay_time.append(delay[deed] + dp_new[5, index[deed]])
-            idle = delay_time[-1]
+            delay_time = np.append(delay_time, delay[deed] + dp_new[5, index[deed]])
     else:
-        if not machine:  # 当first为空
-            machine.append(index[deed])
-            delay_time.append(delay[deed] + dp_new[5, index[deed]])
-            idle = delay_time[-1]
+        if len(machine) == 1:  # 当first为空
+            delay_time = np.append(delay_time, delay[deed] + dp_new[5, index[deed]])
         else:
-            machine.append(index[deed])
-            delay_time.append(
-                max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[5, index[deed]] * alpha)
-            idle = delay_time[-1]
+            delay_time = np.append(delay_time,
+                                   max(delay[deed], delay_time[-1]) + dc_new[machine[-2], machine[-1]] + dp_new[
+                                       5, index[deed]] * alpha)
+    idle = delay_time[-1]
     deed += 1
     return machine, deed, delay_time, idle
 
@@ -151,8 +148,9 @@ def buffer_now(delay, index):
     :param index:出工序5的顺序
     :return:进入buffer的顺序，延迟时间，1-buffer的顺序
     """
-    first, second = [], []
-    delay_time1, delay_time2 = [], []
+    index = np.array(index)
+    first, second = np.array([], dtype=int), np.array([], dtype=int)
+    delay_time1, delay_time2 = np.array([]), np.array([])
     idle1, idle2 = 0, 0  # 当前机器的空闲时间
     deed = 0
 
@@ -163,12 +161,12 @@ def buffer_now(delay, index):
             else:
                 second, deed, delay_time2, idle2 = dynamic_buffer(index, delay, second, deed, delay_time2, 2)
             continue
+
         if idle1 < idle2:  # 机器1先空闲
             first, deed, delay_time1, idle1 = dynamic_buffer(index, delay, first, deed, delay_time1, 1)
         else:  # 机器2先空闲
             second, deed, delay_time2, idle2 = dynamic_buffer(index, delay, second, deed, delay_time2, 2)
 
-    first, second = np.array(first), np.array(second)
     index_sort, delay_sort = six_merge(delay_time1, delay_time2, first, second)
     index_1t6 = [index, first, second]
     return index_sort, delay_sort, index_1t6
@@ -260,6 +258,27 @@ def cross(index, delay, key_words="cross", times=1):
     for _ in np.arange(times):
         delay_c[_] = delay[get_element_index(index[-1], index_c[_][-1])]
     return index_c, delay_c
+    # index_c = []
+    # index_copy = copy.deepcopy(index)
+    # for _ in np.arange(times):
+    #     index1, index2 = np.random.choice(component_num, size=2, replace=False)
+    #     if key_words == "cross":
+    #         index_copy[-1][index2], index_copy[-1][index1] = index_copy[-1][index1], index_copy[-1][index2]
+    #     elif key_words == "insert":
+    #         value = index_copy[-1][index1]
+    #         if index1 > index2:
+    #             index_copy[-1] = np.delete(index[-1], index1)
+    #             index_copy[-1] = np.insert(index_copy[-1], index2, value)
+    #     elif key_words == "reverse":
+    #         left, right = min(index1, index2), max(index1, index2)
+    #         index_copy[-1][left:right] = index_copy[-1][left:right][::-1]
+    #     else:
+    #         pass
+    #     index_c.append(copy.deepcopy(index_copy))
+    # delay_c = np.zeros((times, component_num))
+    # for _ in np.arange(times):
+    #     delay_c[_] = delay[get_element_index(index[-1], index_c[_][-1])]
+    # return index_c, delay_c
 
 
 def neighborhood_search(index, delay, key_words="cross"):
@@ -525,7 +544,7 @@ half = population_num // 2
 alpha = 1.2  # 六号工位二号机的加工时间系数
 count = 0  # 重复迭代数
 count_p = 1 - count / all_circle
-buffer_p = 0.5
+buffer_p = 0.6
 
 best_time_series = []
 inhibit_dict = {}  # 空禁忌表
