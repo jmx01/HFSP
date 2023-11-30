@@ -9,7 +9,6 @@ import pandas as pd
 from numba import jit
 from plotly.figure_factory import create_gantt
 from scipy.optimize import linear_sum_assignment
-from tqdm import tqdm
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -58,6 +57,7 @@ def add_initial_element(pop_num):
     pop_num:总个体数
     return:空
     """
+    num = np.arange(component_num)  # 生成初始数据
     part = np.array([copy.deepcopy(num)])  # 添加最初序列
     # 添加精英解
     out_layer = np.arange(len(circle_list))
@@ -132,7 +132,7 @@ def buffer_now(delay: list, index: list):
     delay_time1.append(delay[0] + dp_new[5, index[0]])
     deed = 1  # 已加工个数
     while deed < len(index):  # 当还有工件未完成时
-        if np.random.random() < p:
+        if np.random.random() < count_p:
             if not first:  # 当first为空时
                 first.append(index[deed])
                 delay_time1.append(delay[deed] + dp_new[5, index[deed]])
@@ -183,14 +183,9 @@ def update_inhibit_dict(index_all, delay):
     :param delay: 进入7时的延迟时间
     :return: 空
     """
-    ind = index_all[-1]
-    name = [*index_all[0], -1]
-    for ccc in range(len(index_all) - 1):
-        name.extend(index_all[ccc + 1])
-        name.append(-1)
-    name = tuple(name)
+    name = tuple(np.concatenate((index_all[0], [-1], index_all[1], [-1], index_all[2], [-1], index_all[3], [-1])))
     if name not in inhibit_dict.keys():
-        inhibit_dict[name] = 1e5 / process(ind, delay)[0][-1]
+        inhibit_dict[name] = 1e5 / process(index_all[-1], delay)[0][-1]
 
 
 def ox(solution1, solution2):
@@ -234,10 +229,10 @@ def ox(solution1, solution2):
     return c_new
 
 
-def cross(index, key_words="cross", times=1):
+def cross(index, delay, key_words="cross", times=1):
     index_c = []
     index_copy = copy.deepcopy(index)
-    for time in range(times):
+    for _ in np.arange(times):
         index1, index2 = np.random.choice(component_num, size=2, replace=False)
         if key_words == "cross":
             index_copy[-1][index2], index_copy[-1][index1] = index_copy[-1][index1], index_copy[-1][index2]
@@ -252,13 +247,16 @@ def cross(index, key_words="cross", times=1):
         else:
             pass
         index_c.append(copy.deepcopy(index_copy))
-    return index_c
+    delay_c = np.zeros((times, component_num))
+    for _ in np.arange(times):
+        delay_c[_] = delay[get_element_index(index[-1], index_c[_][-1])]
+    return index_c, delay_c
 
 
 def neighborhood_search(index, delay, key_words="cross"):
-    index_copy = cross(index, key_words, 10)
-    for u in index_copy:
-        update_inhibit_dict(u, delay)
+    index_copy, delay_copy = cross(index, delay, key_words, 10)
+    for u in range(len(index_copy)):
+        update_inhibit_dict(index_copy[u], delay_copy[u])
 
 
 def process_new(index, delay, index_16):
@@ -289,6 +287,7 @@ def get_element_index(old_array, new_array):
     return np.array([np.argwhere(old_array == era)[0][0] for era in new_array])
 
 
+@jit(nopython=True)
 def six_decode(now_list, delay_time, choose):
     """
     在六处的解码
@@ -398,9 +397,12 @@ def population_to_batch():
 
 def fetch_parents(bi):
     # father_p, mother_p = undo(max(bi, key=lambda x: x[-1])[0])[1], undo(bi[random.randint(0, len(bi) - 1)][0])[1]  #np
-    father_p, mother_p = undo(max(bi, key=lambda x: x[-1])[0])[0][0], undo(bi[random.randint(0, len(bi) - 1)][0])[0][
-        0]  # list
-    return father_p, mother_p
+    father_p, mother_p = undo(max(bi, key=lambda x: x[-1])[0])[0][0], undo(bi[random.randint(0, len(bi) - 1)][0])[0][0]
+    wife_p = list(np.random.permutation(father_p))
+    if random.random() < count_p:
+        return father_p, mother_p
+    else:
+        return father_p, wife_p
 
 
 def generate_child(f, m, bf, adorable_times=20, child_num=5):
@@ -495,28 +497,30 @@ dp1 = pd.read_csv(path + 'case' + str(reed) + '_process.csv')
 dc1 = pd.read_csv(path + 'case' + str(reed) + '_time.csv')
 dp_new = np.array(dp1)
 dc_new = np.array(dc1)
-row, col = np.diag_indices_from(dc_new)
-dc_new[row, col] = 1e5
 
 component_num = dp1.shape[1]  # 工件数
-num = np.arange(component_num)  # 生成初始数据
 circle_list = Hungarian_Algorithm()  # 最优循环
 delay_initial = np.zeros(component_num)  # 初始延迟时间，为工件数序列
 population_elite_num = component_num  # 精英子个体数
 action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
-out_circle = 10
+out_circle = 100
+inside_circle = 1
+thread_num = 6
+all_circle = out_circle * inside_circle * thread_num * 10
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 half = population_num // 2
 alpha = 1.2  # 六号工位二号机的加工时间系数
-p = 0.9  # 天然选择一号机的概率
+count = 0  # 重复迭代数
+count_p = 1 - count / all_circle
 
-best_time_series = []
+best_time_series = [20000]
 inhibit_dict = {}  # 空禁忌表
 
 add_initial_element(population_num)
-for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+# for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
+while best_time_series[-1] >= 10947:
     inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
     population = inhibit_tuple[0:half]
     population.extend(random.sample(inhibit_tuple[half:200], half))
@@ -526,22 +530,28 @@ for kk in tqdm(range(out_circle), ncols=80, position=0, leave=True):
     batch = population_to_batch()
 
     for b in batch:
+        # for _ in np.arange(inside_circle):
         tp = []
-        for t in range(6):
+        for t in np.arange(thread_num):
             tp.append(threading.Thread(target=work, args=(b,)))
-        for t in range(6):
+        for t in np.arange(thread_num):
             tp[t].start()
             tp[t].join()
-
-    best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
-
+            best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
+            if best_time_series[-1] == best_time_series[-2]:
+                count += 1
+                count_p = 1 - count / all_circle
+            else:
+                count = 0
+    # best_time_series.append(1e5 / inhibit_dict[next(iter(inhibit_dict))])
+    print("已循环一次")
 
 print(len(inhibit_dict))
 inhibit_tuple = sorted(inhibit_dict.items(), key=operator.itemgetter(1), reverse=True)
 print(inhibit_tuple[0])
 decode(undo(inhibit_tuple[0][0])[0])
 plt.plot(best_time_series)
-# plt.show()
+plt.show()
 
 # 优秀解
 # decode([[5, 1, 6, 0, 4, 7, 3, 2], [6, 0, 4, 3], [5, 1, 7, 2], [5, 6, 0, 1, 7, 4, 3, 2]])
