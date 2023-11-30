@@ -20,8 +20,8 @@ def Hungarian_Algorithm():
     匈牙利算法，求解最优循环
     :return:最优循环列表
     """
-    for i in range(dc_new.shape[0]):
-        dc_new[i][i] = 10000
+    row, col = np.diag_indices_from(dc_new)
+    dc_new[row, col] = 10000
     row_ind, col_ind = linear_sum_assignment(dc_new)
     use_circle = []
     used_element = [0] * len(row_ind)
@@ -101,6 +101,7 @@ def process(now_list, delay_time, arr=np.arange(6, 10)) -> list:
     return out_time, end_time
 
 
+@jit(nopython=True)
 def six_merge(delay1, delay2, index1, index2):
     """
     在六处加工结束后，生成出工序六的顺序
@@ -110,7 +111,6 @@ def six_merge(delay1, delay2, index1, index2):
     :param index2: 顺序二
     :return:排好的顺序，对应的延迟时间
     """
-    delay1, delay2 = np.array(delay1), np.array(delay2)
     index_buffer = np.hstack((index1, index2))
     delay_time = np.hstack((delay1, delay2))
     delay_arg = np.argsort(delay_time)
@@ -186,54 +186,6 @@ def update_inhibit_dict(index_all, delay):
             inhibit_dict[name] = 1e5 / process(index_all[-1], delay)[0][-1]
     else:
         pass
-
-
-def ox(solution1, solution2):
-    # solution1 = np.array(solution1)
-    # solution2 = np.array(solution2)
-    # ccc1, ccc2 = solution1, solution2
-    # if (solution1 == solution2).all():
-    #     np.random.shuffle(solution2)
-    #     ccc2 = np.random.permutation(solution2)
-    # else:
-    #     index = np.sort(np.random.choice(component_num, 2, replace=False))
-    #     fix1, fix2 = ccc1[index[0]:index[1]], ccc2[index[0]:index[1]]
-    #     res1, res2 = np.concatenate(ccc1[:index[0]], ccc1[index[1]:]), np.concatenate(ccc2[:index[0]], ccc2[index[1]:])
-    #     index_c1 = get_element_index(ccc2, fix1)
-    #     index_c2 = get_element_index(ccc1, fix2)
-    #
-    # return ccc1, ccc2
-    if len(solution1) == 2:
-        rand = [0, 1]
-        random.shuffle(rand)
-    else:
-        rand = random.sample(range(0, len(solution1) - 1), 2)
-    min_rand, max_rand = min(rand), max(rand)
-    "生成不变区域"
-    copy_mid = [solution1[min_rand:max_rand + 1], solution2[min_rand:max_rand + 1]]
-    "生成改变区域"
-    s1_head = solution1[:min_rand]
-    s1_head.reverse()
-    s1_tail = solution1[max_rand + 1:]
-    s1_tail.reverse()
-    s2_head = solution2[:min_rand]
-    s2_head.reverse()
-    s2_tail = solution2[max_rand + 1:]
-    s2_tail.reverse()
-    swap = [s2_head + s2_tail, s1_head + s1_tail]
-    "生成子列表"
-    c_new = []
-    for ix in range(2):
-        c_swap = []
-        while swap[ix]:
-            tmp = swap[ix].pop()
-            if tmp not in copy_mid[ix]:
-                c_swap.append(tmp)
-        for c in copy_mid[1 - ix]:
-            if c not in copy_mid[ix]:
-                c_swap.append(c)
-        c_new.append(c_swap[len(solution1) - max_rand - 1:] + copy_mid[ix] + c_swap[:len(solution1) - max_rand - 1])
-    return c_new
 
 
 def cross(index, delay, key_words="cross", times=1):
@@ -434,6 +386,54 @@ def fetch_parents(bi):
         return father_p, mother_p
     else:
         return father_p, wife_p
+
+
+def ox(solution1, solution2):
+    # solution1 = np.array(solution1)
+    # solution2 = np.array(solution2)
+    # ccc1, ccc2 = solution1, solution2
+    # if (solution1 == solution2).all():
+    #     np.random.shuffle(solution2)
+    #     ccc2 = np.random.permutation(solution2)
+    # else:
+    #     index = np.sort(np.random.choice(component_num, 2, replace=False))
+    #     fix1, fix2 = ccc1[index[0]:index[1]], ccc2[index[0]:index[1]]
+    #     res1, res2 = np.concatenate(ccc1[:index[0]], ccc1[index[1]:]), np.concatenate(ccc2[:index[0]], ccc2[index[1]:])
+    #     index_c1 = get_element_index(ccc2, fix1)
+    #     index_c2 = get_element_index(ccc1, fix2)
+    #
+    # return ccc1, ccc2
+    if len(solution1) == 2:
+        rand = [0, 1]
+        random.shuffle(rand)
+    else:
+        rand = random.sample(range(0, len(solution1) - 1), 2)
+    min_rand, max_rand = min(rand), max(rand)
+    "生成不变区域"
+    copy_mid = [solution1[min_rand:max_rand + 1], solution2[min_rand:max_rand + 1]]
+    "生成改变区域"
+    s1_head = solution1[:min_rand]
+    s1_head.reverse()
+    s1_tail = solution1[max_rand + 1:]
+    s1_tail.reverse()
+    s2_head = solution2[:min_rand]
+    s2_head.reverse()
+    s2_tail = solution2[max_rand + 1:]
+    s2_tail.reverse()
+    swap = [s2_head + s2_tail, s1_head + s1_tail]
+    "生成子列表"
+    c_new = []
+    for ix in range(2):
+        c_swap = []
+        while swap[ix]:
+            tmp = swap[ix].pop()
+            if tmp not in copy_mid[ix]:
+                c_swap.append(tmp)
+        for c in copy_mid[1 - ix]:
+            if c not in copy_mid[ix]:
+                c_swap.append(c)
+        c_new.append(c_swap[len(solution1) - max_rand - 1:] + copy_mid[ix] + c_swap[:len(solution1) - max_rand - 1])
+    return c_new
 
 
 def generate_child(f, m, bf, adorable_times=20, child_num=5):
