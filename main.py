@@ -373,7 +373,7 @@ def decode(ppp):
 
     end_time_15 = np.delete(end_time_15, 0, axis=1)
     end_time_710 = np.delete(end_time_710, 0, axis=1)
-    end_time_15 = np.column_stack((end_time_15, end_time_710[end_index]))
+    end_time_15 = np.c_[end_time_15, end_time_710[end_index]]
 
     start_time = np.zeros((component_num, 10))
     for out in range(component_num):
@@ -516,9 +516,9 @@ delay_initial = np.zeros(component_num)  # 初始延迟时间，为工件数序�
 population_elite_num = component_num  # 精英子个体数
 action = ["cross", "insert", "reverse"]  # 邻域搜索的操作
 
-out_circle = 100
+out_circle = 10
 thread_num = 6
-all_circle = out_circle * thread_num * 10
+all_circle = out_circle * thread_num * 30
 population_random_num = 64  # 随机子个体数
 population_num = population_elite_num + population_random_num  # 种群总个体数
 half = population_num // 2
