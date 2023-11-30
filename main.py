@@ -148,7 +148,6 @@ def buffer_now(delay, index):
     :param index:出工序5的顺序
     :return:进入buffer的顺序，延迟时间，1-buffer的顺序
     """
-    index = np.array(index)
     first, second = np.array([], dtype=int), np.array([], dtype=int)
     delay_time1, delay_time2 = np.array([]), np.array([])
     idle1, idle2 = 0, 0  # 当前机器的空闲时间
@@ -379,63 +378,31 @@ def population_to_batch():
 
 
 def fetch_parents(bi):
-    # father_p, mother_p = undo(max(bi, key=lambda x: x[-1])[0])[1], undo(bi[random.randint(0, len(bi) - 1)][0])[1]  #np
-    father_p, mother_p = undo(max(bi, key=lambda x: x[-1])[0])[0][0], undo(bi[random.randint(0, len(bi) - 1)][0])[0][0]
-    wife_p = list(np.random.permutation(father_p))
-    if random.random() < count_p:
-        return father_p, mother_p
-    else:
-        return father_p, wife_p
+    father_p = undo(max(bi, key=lambda x: x[-1])[0])[1]
+    mother_p = np.where(np.random.random() < count_p, np.random.permutation(father_p),
+                        undo(bi[random.randint(0, len(bi) - 1)][0])[1])
+    return father_p, mother_p
 
 
-def ox(solution1, solution2):
-    # solution1 = np.array(solution1)
-    # solution2 = np.array(solution2)
-    # ccc1, ccc2 = solution1, solution2
-    # if (solution1 == solution2).all():
-    #     np.random.shuffle(solution2)
-    #     ccc2 = np.random.permutation(solution2)
-    # else:
-    #     index = np.sort(np.random.choice(component_num, 2, replace=False))
-    #     fix1, fix2 = ccc1[index[0]:index[1]], ccc2[index[0]:index[1]]
-    #     res1, res2 = np.concatenate(ccc1[:index[0]], ccc1[index[1]:]), np.concatenate(ccc2[:index[0]], ccc2[index[1]:])
-    #     index_c1 = get_element_index(ccc2, fix1)
-    #     index_c2 = get_element_index(ccc1, fix2)
-    #
-    # return ccc1, ccc2
-    solution1 = list(solution1)
-    solution2 = list(solution2)
-    if len(solution1) == 2:
-        rand = [0, 1]
-        random.shuffle(rand)
-    else:
-        rand = random.sample(range(0, len(solution1) - 1), 2)
-    min_rand, max_rand = min(rand), max(rand)
-    "生成不变区域"
-    copy_mid = [solution1[min_rand:max_rand + 1], solution2[min_rand:max_rand + 1]]
-    "生成改变区域"
-    s1_head = solution1[:min_rand]
-    s1_head.reverse()
-    s1_tail = solution1[max_rand + 1:]
-    s1_tail.reverse()
-    s2_head = solution2[:min_rand]
-    s2_head.reverse()
-    s2_tail = solution2[max_rand + 1:]
-    s2_tail.reverse()
-    swap = [s2_head + s2_tail, s1_head + s1_tail]
-    "生成子列表"
-    c_new = []
-    for ix in range(2):
-        c_swap = []
-        while swap[ix]:
-            tmp = swap[ix].pop()
-            if tmp not in copy_mid[ix]:
-                c_swap.append(tmp)
-        for c in copy_mid[1 - ix]:
-            if c not in copy_mid[ix]:
-                c_swap.append(c)
-        c_new.append(c_swap[len(solution1) - max_rand - 1:] + copy_mid[ix] + c_swap[:len(solution1) - max_rand - 1])
-    return c_new
+@jit(nopython=True)
+def ox(solution1: np.ndarray, solution2: np.ndarray) -> np.ndarray:
+    ccc1, ccc2 = solution1, solution2
+    index = np.sort(np.random.choice(component_num, 2, replace=False))
+    fix1, fix2 = ccc1[index[0]:index[1]], ccc2[index[0]:index[1]]
+    res12, res11, res22, res21 = ccc1[index[1]:], ccc1[:index[0]], ccc2[index[1]:], ccc2[:index[0]]
+    res1, res2 = np.concatenate((res12, res11, fix1)), np.concatenate((res22, res21, fix2))
+    index_c1, index_c2 = get_element_index(res1, fix2), get_element_index(res2, fix1)
+    res1, res2 = np.delete(res1, index_c1), np.delete(res2, index_c2)
+    ccc1 = np.concatenate((res2[:index[0]], fix1, res2[index[0]:]))
+    ccc2 = np.concatenate((res1[:index[0]], fix2, res1[index[0]:]))
+    return ccc1, ccc2
+
+
+def update_c(f, m, cf, cdf):
+    c1, c2 = ox(f, m)
+    cf = np.vstack((cf, c1, c2))
+    cdf = np.vstack((cdf, process(c1, delay_initial, np.arange(5))[0], process(c2, delay_initial, np.arange(5))[0]))
+    return cf, cdf
 
 
 def generate_child(f, m, bf, adorable_times=20, child_num=5):
@@ -446,11 +413,7 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
     cdf = process(f, delay_initial, np.arange(5))[0]
     cdf = np.row_stack((cdf, process(m, delay_initial, np.arange(5))[0]))
     for i in range(child_num):
-        c1, c2 = ox(f, m)
-        c1, c2 = np.array(c1), np.array(c2)
-        cf = np.row_stack((cf, c1, c2))
-        cdf = np.row_stack(
-            (cdf, process(c1, delay_initial, np.arange(5))[0], process(c2, delay_initial, np.arange(5))[0]))
+        cf, cdf = update_c(f, m, cf, cdf)
 
     while adorable_times >= 0:
         now = np.random.randint(0, len(cf))
@@ -458,23 +421,19 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
             cf = np.delete(cf, now, 0)
             cdf = np.delete(cdf, now, 0)
             new1, new2 = cf[np.random.choice(cf.shape[0], 2, replace=False)]
-            c1, c2 = ox(new1, new2)
-            c1, c2 = np.array(c1), np.array(c2)
-            cf = np.row_stack((cf, c1, c2))
-            cdf = np.row_stack(
-                (cdf, process(c1, delay_initial, np.arange(5))[0], process(c2, delay_initial, np.arange(5))[0]))
+            cf, cdf = update_c(new1, new2, cf, cdf)
         adorable_times -= 1
 
     adorable_times = 20
     ad_num = 1e5 / bf * 0.8
-    while len(cf) >= 2 and adorable_times > 0:
+    while adorable_times > 0:
         now = np.random.randint(0, len(cf))
         if cdf[now][-1] > ad_num:
             cf = np.delete(cf, now, 0)
             cdf = np.delete(cdf, now, 0)
         adorable_times -= 1
 
-    for cc in range(len(cf)):
+    for cc in np.arange(len(cf)):
         index, delay, index1_6 = buffer_now(cdf[cc], cf[cc])
         process_new(index, delay, index1_6)
 
@@ -482,6 +441,7 @@ def generate_child(f, m, bf, adorable_times=20, child_num=5):
 def work(bi):
     father, mother = fetch_parents(bi)
     generate_child(father, mother, population_best_one[-1])
+    # add_initial_element(population_num)
 
 
 # 零件号,机器号均减了1，记得最后要加1
